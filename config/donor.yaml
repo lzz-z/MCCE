@@ -4,7 +4,7 @@ model:
   azure_endpoint: "https://example.openai.azure.com/"
   api_version: "2024-02-01"
 
-goals: [qed]
+goals: [donor]
 
 optimization:
   pop_size: 20

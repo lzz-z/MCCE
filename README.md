@@ -5,6 +5,9 @@ This repository contains the source code and scripts for the MOLLM project. The 
 ## Project Structure
 
 /home/v-nianran/src/MOLLM <br>
+├── algorithm <br>
+│ ├── base.py <br>
+│ └──  MOO.py <br>
 ├── dataset <br>
 │ └── collect_data.py <br>
 ├── eval.py <br>
@@ -13,9 +16,12 @@ This repository contains the source code and scripts for the MOLLM project. The 
 │ ├── MOLLM.py <br>
 │ ├── MOScigpt.py <br>
 │ ├── load_Scigpt.py <br>
-│ └── util.py <br>
-└── mollm.ipynb <br>
+│ ├── util.py <br>
+│ └── LLM.py <br>
+└── test.ipynb <br>
 
+### Running the experiments
+  - `python main.py --config config/base.yaml`: You only need to config the YAML file to change the settings and goals.
 
 ### Description of Files and Directories
 
@@ -30,6 +36,7 @@ This repository contains the source code and scripts for the MOLLM project. The 
 
 - **model/**
   - `MOLLM.py`: Contains the implementation of the MOLLM model.
+  - `LLM.py`: Implemetation of LLM model
   - `MOScigpt.py`: MO SciGPT model and its algorithm.
   - `load_Scigpt.py`: Utility script to load the SciGPT model.
   - `util.py`: Utility functions used across the project, including NSGA-II currently.

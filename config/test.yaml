@@ -7,9 +7,9 @@ model:
 goals: [qed]
 
 optimization:
-  pop_size: 20
+  pop_size: 4
   eval_budget: 200
-  ngen: 10
+  ngen: 3
 
 prompt_template: "/home/v-nianran/src/MOLLM/data/.json"
 

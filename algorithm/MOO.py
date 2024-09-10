@@ -158,9 +158,10 @@ class MOO:
         + pop_content +
         " Give me two new molecules that are different from all points above, and not dominated by any of the above. "
         "You can do it by applying crossover on the points I give to you. "
-        f"Please note when you try to achieving these objectives, the molecules given you propose should be similar to the original molecule <mol>{self.original_mol}</mol>. "
+        f"Please note when you try to achieving these objectives, the molecules you propose should be similar to the original molecule <mol>{self.original_mol}</mol>. "
         "Do not write code. Do not give any explanation. Each output new molecule must start with <mol> and end with </mol> in SIMLE form"
         )
+        print(prompt)
         response = self.llm.chat(prompt)
         new_smiles = extract_smiles_from_string(response)
         return [Item(smile,self.property_list) for smile in new_smiles],prompt,response

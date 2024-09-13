@@ -161,7 +161,6 @@ class MOO:
         f"Please note when you try to achieving these objectives, the molecules you propose should be similar to the original molecule <mol>{self.original_mol}</mol>. "
         "Do not write code. Do not give any explanation. Each output new molecule must start with <mol> and end with </mol> in SIMLE form"
         )
-        print(prompt)
         response = self.llm.chat(prompt)
         new_smiles = extract_smiles_from_string(response)
         return [Item(smile,self.property_list) for smile in new_smiles],prompt,response

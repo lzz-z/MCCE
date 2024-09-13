@@ -1,7 +1,7 @@
 import requests
 import json
 url = 'http://cpu1.ms.wyue.site:8000/process'
-
+import time
 
 def get_evaluation(evaluate_metric, smiles):
     data = {
@@ -23,7 +23,12 @@ class Rewarding_system:
         return self.all_rewards[reward_name](*items)
 
     def evaluate(self,ops,smiles_list):
-        return get_evaluation(ops,smiles_list)
+        while True:
+            try:
+                return get_evaluation(ops,smiles_list)
+            except Exception as e:
+                print(f'encounter exception in get evaluation: {e}, retry in 60s')
+                time.sleep(60)
 
     def evaluate_items(self, items, qed_requ, logp_requ, donor_requ, donor_num):
         smiles_list = [[item.value] for item in items]

@@ -6,15 +6,14 @@ def main():
     parser = argparse.ArgumentParser(description='Run MOLLM with a configuration file')
     
     # Add an argument for the configuration file path
-    parser.add_argument(
-        '--config', type=str, required=True, help='Path to the configuration file (YAML format)'
-    )
+    parser.add_argument('--config', type=str, required=True, help='Path to the configuration file (YAML format)')
+    parser.add_argument('--resume', action='store_true', help='resume training from the last checkpoint')
     
     # Parse the arguments from the command line
     args = parser.parse_args()
 
     # Pass the config file path to MOLLM and run it
-    mollm = MOLLM(args.config)
+    mollm = MOLLM(args.config,resume=args.resume)
     mollm.run()
 
 if __name__ == "__main__":

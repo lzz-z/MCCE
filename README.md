@@ -22,6 +22,7 @@ This repository contains the source code and scripts for the MOLLM project. The 
 
 ### Running the experiments
   - `python main.py --config config/base.yaml`: You only need to config the YAML file to change the settings and goals.
+  - `python main.py --config config/base.yaml --resume`: to automatically resume from last saved .pkl file
 
 ### Description of Files and Directories
 

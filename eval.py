@@ -60,8 +60,10 @@ def extract_smiles_from_string(text):
     smiles_list = re.findall(pattern, text)
     return smiles_list
 
-def mean_sr(r):
-    return r.mean(), (r>0).sum()/len(r)
+def mean_sr(r,num_candiate=5):
+    k = r.clip(0,num_candiate)
+    new_sr = k.sum()/ (len(k)*num_candiate)
+    return r.mean(), (r>0).sum()/len(r),new_sr
 
 def eval_mo_results(dataset,obj,similarity_requ=0.4,ops=['qed','logp','donor'],candidate_num=20):
     hist_success_times = []

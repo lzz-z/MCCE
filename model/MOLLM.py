@@ -69,10 +69,11 @@ class MOLLM:
             'final_pops':self.final_pops,
         }
         r  = eval_mo_results(self.dataset,obj,similarity_requ=0.4,ops=self.property_list,candidate_num=20)
-        mean_success_num,mean_success_rate = mean_sr(r)
-        print(f'mean success number: {mean_success_num:.4f}, mean success rate: {mean_success_rate:.4f}')
+        mean_success_num,mean_success_rate,new_sr = mean_sr(r)
+        print(f'mean success number: {mean_success_num:.4f}, new mean success rate {new_sr:.4f}, mean success rate: {mean_success_rate:.4f}')
         self.results = {
             'mean success num': mean_success_num,
+            'new mean success rate': new_sr,
             'mean success rate': mean_success_rate,
             'success num each problem': r
         }

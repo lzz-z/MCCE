@@ -12,12 +12,14 @@ import os
 from algorithm.base import Item,HistoryBuffer
 from openai import AzureOpenAI
 from tdc.generation import MolGen
-
+from rdkit.Chem import AllChem
+import json
 from eval import get_evaluation
 import time
 from model.util import nsga2_selection,so_selection
 from algorithm import PromptTemplate
 from eval import judge
+import pickle
 def set_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
@@ -41,19 +43,26 @@ def split_list(lst, n):
     return [lst[i*k + min(i, m):(i+1)*k + min(i+1, m)] for i in range(n)]
 
 class MOO:
-    def __init__(self, reward_system, llm,property_list,config):
+    def __init__(self, reward_system, llm,property_list,config,seed):
         self.reward_system = reward_system
         self.config = config
+        self.seed = seed
         self.llm = llm
         self.history = HistoryBuffer()
         self.property_list = property_list
         self.moles_df = None
         self.pop_size = self.config.get('optimization.pop_size')
+        self.budget = self.config.get('optimization.eval_budget')
         self.init_mol_dataset()
         self.prompt_module = getattr(PromptTemplate ,self.config.get('model.prompt_module',default='Prompt'))
         self.successful_moles = []
         self.failed_moles = []
-    
+        self.history_moles = []
+        self.all_mols = []
+        self.results_dict = []
+        self.repeat_num = 0
+        self.failed_num = 0
+        self.llm_calls = 0
 
     def init_mol_dataset(self):
         print('Loading ZINC dataset...')
@@ -62,6 +71,17 @@ class MOO:
         self.moles_df = split['train']
 
     def generate_initial_population(self, mol1, n):
+        
+        with open("/home/v-nianran/src/MOLLEO/multi_objective/ini_smiles",'r') as f:
+            smiles = f.readlines()
+        smiles = [i.replace('\n','') for i in smiles]
+        print(f'{len(smiles)} items for init pops')
+        return [Item(i,self.property_list) for i in smiles]
+
+        top_n = self.moles_df.sample(n - 1).smiles.values.tolist()
+        top_n.append(mol1)
+        return [Item(i,self.property_list) for i in top_n]
+
         num_blocks = 200
         combs = [[mol1, mol2] for mol2 in self.moles_df.smiles]
         combs_blocks = split_list(combs, num_blocks)
@@ -80,10 +100,11 @@ class MOO:
         return [Item(i,self.property_list) for i in top_n]
 
     def crossover(self, parent_list):
-        prompt = self.prompt_generator.get_crossover_prompt(parent_list)
+        prompt = self.prompt_generator.get_crossover_prompt(parent_list,self.history_moles)
+        #print(prompt,'\n\n')
+        #assert False
         response = self.llm.chat(prompt)
         new_smiles = extract_smiles_from_string(response)
-        
         return [Item(smile,self.property_list) for smile in new_smiles],prompt,response
 
     def evaluate(self, smiles_list):
@@ -100,41 +121,6 @@ class MOO:
                 raw_results[j,i] = inst
                 value = self.transform4moo(inst,op,)
                 results[j,i] = value
-                '''
-                if op=='qed':
-                    if 'increase' in self.requirement_meta['qed_requ']['requirement']:
-                        results[j,i] = -inst
-                    else:
-                        results[j,i] = inst
-                elif op=='logp':
-                    logp_requ = self.requirement_meta['logp_requ']['requirement']
-                    if 'increase' in logp_requ:
-                        results[j,i] = -inst / 10
-                    elif 'range' in logp_requ:
-                        a, b = [int(x) for x in logp_requ.split(',')[1:]]
-                        mid = (b+a)/2
-                        results[j,i] = np.clip(abs(inst-mid) * 1/ ( (b-a)/2), a_min=0,a_max=1)    # 2-3    2.5  3-2.5=0.5 * 2     1 0
-                    else:
-                        results[j,i] = inst/10
-                elif op=='donor':
-                    #print('donor num',inst,donor_num,j,i)
-                    donor_requ = self.requirement_meta['donor_requ']['requirement']
-                    donor_num = self.original_mol.property['donor']
-                    if donor_requ == 'increase' and inst - donor_num>0:
-                        results[j,i] = 0
-                    elif donor_requ == 'decrease' and donor_num - inst>0:
-                        results[j,i] = 0
-                    elif donor_requ == 'same' and donor_num == inst:
-                        results[j,i] = 0
-                    elif donor_requ == 'increase, >=2' and inst - donor_num>=2:
-                        results[j,i] = 0
-                    else:
-                        results[j,i] = 1  
-                elif op=='similarity':
-                    results[j,i] = -inst
-                else:
-                    raise NotImplementedError
-                '''
         return results,raw_results
 
     def transform4moo(self,value,op):
@@ -147,7 +133,10 @@ class MOO:
         requirement = self.requirement_meta[f'{op}_requ']['requirement']
         if op =='similarity':
             return -value
-        if op in ['donor','smartsFilter']: 
+        if op == 'reduction_potential':
+            towards_value = float(requirement.split(',')[1])
+            return abs(value - towards_value)/5
+        if op in ['donor','smarts_filter']: 
             is_true = judge(requirement,original_value,value)
             if is_true:
                 return 0
@@ -158,10 +147,10 @@ class MOO:
             this means the transformed value will only be minimized to as low as possible
             '''
             if 'range' in requirement:
-                a, b = [int(x) for x in requirement.split(',')[1:]]
+                a, b = [float(x) for x in requirement.split(',')[1:]]
                 mid = (b+a)/2
                 return np.clip(abs(value-mid) * 1/ ( (b-a)/2), a_min=0,a_max=1)
-            if op in ['logp','logs']:
+            if op in ['logp','logs','sa']:
                 value = value/10
             if 'increase' in requirement:
                 return -value
@@ -180,30 +169,85 @@ class MOO:
             ind.assign_raw_scores(raw_results[i])
             #ind.raw_scores = raw_results[i]
 
+    def store_history_moles(self,pops):
+        for i in pops:
+            if i.value not in self.history_moles:
+                self.history_moles.append(i.value)
+                self.all_mols.append(i)
+
+    def log(self):
+        top100 = sorted(self.all_mols, key=lambda item: item.total, reverse=True)[:100]
+        top10 = top100[:10]
+        avg_top10 = np.mean([i.total for i in top10])
+        avg_top100 = np.mean([i.total for i in top100])
+        avg_sa = np.mean([i.property['sa'] for i in top100])
+        diversity_top100 = self.reward_system.all_evaluators['diversity']([i.value for i in top100])
+        self.results_dict.append(
+            {   'all_moles': len(self.history_moles),
+                'llm_calls': self.llm_calls,
+                'repeat_num':self.repeat_num,
+                'failed_num':self.failed_num,
+                'avg_top1':top10[0].total,
+                'avg_top10':avg_top10,
+                'avg_top100':avg_top100,
+                'avg_sa':avg_sa,
+                'div':diversity_top100,
+            })
+        json_path = os.path.join(self.config.get('save_dir'),'_'.join(self.property_list) + '_' + self.config.get('save_suffix') + f'_{self.seed}'+'.json')
+        with open(json_path,'w') as f:
+            json.dump(self.results_dict, f, indent=4)
+        print(f'{len(self.history_moles)}/{self.budget} | '
+                f'llm_calls/repeat/failed {self.llm_calls}/{self.repeat_num}/{self.failed_num} | '
+                f'avg_top1: {top10[0].total:.3f} | '
+                f'avg_top10: {avg_top10:.3f} | '
+                f'avg_top100: {avg_top100:.3f} | '
+                f'avg_sa: {avg_sa:.3f} | '
+                f'div: {diversity_top100:.3f}')
+
+
     def run(self, prompt,requirements):
         """High level logic"""
+        set_seed(self.seed)
+        start_time = time.time()
         self.requirement_meta = requirements
         ngen= self.config.get('optimization.ngen')
         
         #initialization 
         mol = extract_smiles_from_string(prompt)[0]
-        
 
         population = self.generate_initial_population(mol1=mol, n=self.pop_size)
-
+        self.store_history_moles(population)
         self.original_mol = population[-1] # this original_mol does not have property
         self.evaluate_all(population)
         self.original_mol = population[-1] # this original_mol has property
-
+        self.log()
         self.prompt_generator = self.prompt_module(self.original_mol,self.requirement_meta,self.property_list)
         init_pops = copy.deepcopy(population)
 
         #offspring_times = self.config.get('optimization.eval_budge') // ngen //2
         offspring_times = self.pop_size //2
-        for gen in tqdm(range(ngen)):
+        #for gen in tqdm(range(ngen)):
+        while True:
             offspring = self.generate_offspring(population, offspring_times)
             population = self.select_next_population(population, offspring, self.pop_size)
-        return init_pops,population
+            self.log()
+            if len(self.all_mols) >= self.budget:
+                break
+        print(f'=======> total running time { (time.time()-start_time)/3600 :.2f} hours <=======')
+        store_path = os.path.join(self.config.get('save_dir'),'_'.join(self.property_list) + '_' + self.config.get('save_suffix') + f'_{self.seed}' +'.pkl')
+        data = {
+            'history':self.history,
+            'init_pops':init_pops,
+            'final_pops':population,
+            'all_mols':self.all_mols,
+            'properties':self.property_list,
+            'evaluation': self.results_dict,
+            'running_time':f'{(time.time()-start_time)/3600:.2f} hours'
+        }
+        with open(store_path, 'wb') as f:
+            pickle.dump(data, f)
+        print(f"Data saved to {store_path}")
+        return init_pops,population  # 计算效率
 
     def generate_offspring(self, population, offspring_times):
         #for _ in range(offspring_times): # 20 10 crossver+mutation 20 
@@ -214,34 +258,45 @@ class MOO:
                     futures = [executor.submit(self.crossover, parent_list=parent_list) for parent_list in parents]
                     results = [future.result() for future in futures]
                     children, prompts, responses = zip(*results) #[[item,item],[item,item]] # ['who are you value 1', 'who are you value 2'] # ['yes, 'no']
+                    self.llm_calls += len(results)
                     break
             except Exception as e:
                 print('retry in 60s, exception ',e)
                 time.sleep(90)
+        tmp_offspring = []
+        smiles_this_gen = []
         for child_pair in children:
-            self.evaluate_all(child_pair)
+            for child in child_pair:
+                if child.value in smiles_this_gen:
+                    self.repeat_num += 1
+                else:
+                    tmp_offspring.append(child)
+                    smiles_this_gen.append(child.value)
         # check if the child is valid
-        offspring = self.check_valid(children)
+        offspring = self.check_valid(tmp_offspring)
+        if len(offspring) == 0:
+            return []
+        self.evaluate_all(offspring)
+        self.store_history_moles(offspring)
         self.history.push(prompts,children,responses) 
         return offspring
 
     def check_valid(self,children):
         # may use Chem.MolFromSmiles() to check validity
-        tmp_offspring = []
         offspring = []
-        for child_pair in children:
-            tmp_offspring.extend(child_pair)
-        for child in tmp_offspring:
+        for child in children:
             if self.is_valid(child):
                 offspring.append(child)
         return offspring
     
     def is_valid(self,child):
-        for idx, op in enumerate(child.property_list):
-            if op == 'qed' and child.raw_scores[idx]==0:
-                return False
-            if op == 'logp' and child.raw_scores[idx]==-100:
-                return False
+        mol = AllChem.MolFromSmiles(child.value)
+        if mol is None:
+            self.failed_num += 1
+            return False
+        if child.value in self.history_moles:
+            self.repeat_num +=1
+            return False
         return True
 
     def select_next_population(self, population, offspring, pop_size):

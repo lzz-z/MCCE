@@ -1,0 +1,29 @@
+{
+    "prompts": [
+        "<mol>CCH</mol>"
+    ],
+    "requirements": [
+        {
+            "qed_requ": {
+                "property": "QED",
+                "requirement": "increase"
+            },
+            "drd2_requ": {
+                "property": "DRD2",
+                "requirement": "decrease"
+            },
+            "sa_requ": {
+                "property": "SA",
+                "requirement": "decrease"
+            },
+            "gsk3b_requ": {
+                "property": "GSK3\u03b2",
+                "requirement": "decrease"
+            },
+            "jnk3_requ": {
+                "property": "JNK3",
+                "requirement": "increase"
+            }
+        }
+    ]
+}

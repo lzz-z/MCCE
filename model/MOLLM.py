@@ -6,6 +6,7 @@ import os
 import pickle
 from algorithm.MOO import MOO
 from eval import eval_mo_results,mean_sr
+import pandas as pd
 class ConfigLoader:
     def __init__(self, config_path="config.yaml"):
         config_path = os.path.join('config',config_path)
@@ -26,11 +27,13 @@ class ConfigLoader:
         return value
 
 class MOLLM:
-    def __init__(self, config='base.yaml',resume=False):
+    def __init__(self, config='base.yaml',resume=False,eval=False,seed=42):
         self.config = ConfigLoader(config)
         self.property_list = self.config.get('goals')
-        self.reward_system = RewardingSystem()
+        if not eval:
+            self.reward_system = RewardingSystem()
         self.llm = LLM()
+        self.seed = seed
         self.history = []
         self.load_dataset()
         self.init_pops = []
@@ -45,6 +48,7 @@ class MOLLM:
             'mean success rate': 0,
             'success num each problem': []
         }
+        self.yue_smiles = pd.read_csv('/home/v-nianran/src/MOLLM/data/smiles1960.csv').smiles.values
     
     def load_dataset(self):
         with open(self.config.get('dataset.path'), 'r') as json_file:
@@ -55,7 +59,7 @@ class MOLLM:
             self.load_from_pkl(self.save_path)
         for i in range(self.start_index,len(self.dataset['prompts'])):
             print(f'start {i+1}')
-            moo = MOO(self.reward_system, self.llm,self.property_list,self.config)
+            moo = MOO(self.reward_system, self.llm,self.property_list,self.config,self.seed)
             init_pops,final_pops = moo.run(self.dataset['prompts'][i], self.dataset['requirements'][i])
             self.history.append(moo.history)
             self.final_pops.append(final_pops)
@@ -63,7 +67,17 @@ class MOLLM:
             if (i)%1 ==0:
                 self.evaluate() # evaluate self.final_pops and self.init_pops
             self.save_to_pkl(self.save_path)
-            
+
+            self.check_repeat()
+    def check_repeat(self):
+        time = 0
+        for pops in self.final_pops:
+            for p in pops:
+                if p.value in self.yue_smiles:
+                    time += 1
+        print(f'There are {time} molecules repeated')
+
+
     def load_evaluate(self):
         self.load_from_pkl(self.save_path)
         r = self.evaluate()
@@ -90,7 +104,8 @@ class MOLLM:
             'history':self.history,
             'init_pops':self.init_pops,
             'final_pops':self.final_pops,
-            'evaluation':self.results
+            'evaluation':self.results,
+            'properties':self.property_list
         }
         with open(filepath, 'wb') as f:
             pickle.dump(data, f)

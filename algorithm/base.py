@@ -12,15 +12,30 @@ class Item:
     def assign_raw_scores(self,scores):
         self.raw_scores = scores
         self.property = {self.property_list[i]:scores[i] for i in range(len(self.property_list))}
-
+        self.cal_sum()
+    
+    def cal_sum(self):
+        self.total = 0
+        for p in self.property_list:
+            if p in ['qed','jnk3']:
+                self.total += self.property[p]
+            elif p == 'sa':
+                self.total += 1- (self.property[p] -1 ) /9
+            elif p in ['gsk3b','drd2']:
+                self.total += 1-self.property[p]
+                
 import pickle
 import os
 class HistoryBuffer:
     def __init__(self):
-        self.prompts = []
-        self.generations = []
+        self.prompts = [] #
+        self.generations = [] # 
         self.responses = [] # <mol> </mol>
         self.save_path = 'checkpoint/'
+        self.successful_molecules = []
+        self.failed_molecules = []
+
+    # 
 
     def save_to_pkl(self, filename):
         with open(os.path.join(self.save_path,filename), 'wb') as f:

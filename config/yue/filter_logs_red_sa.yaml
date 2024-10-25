@@ -2,17 +2,17 @@ model:
   name: chatgpt
   prompt_module: Prompt
 
-goals: [smarts_filter,logs,reduction_potential,sa,similarity]
+goals: [smarts_filter,logs,reduction_potential,sa]
 
 optimization: 
   pop_size: 20
   eval_budget: 200
-  ngen: 10
+  ngen: 5
 
 dataset:
-  path: "/home/v-nianran/src/MOLLM/data/chem300.json"
+  path: "/home/v-nianran/src/MOLLM/data/yue300.json"
 
 init_datset: ZINC
 
 save_dir: "/home/v-nianran/src/results"
-save_suffix: "description"
+save_suffix: "yue300"

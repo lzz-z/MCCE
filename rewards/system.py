@@ -3,7 +3,8 @@ import json
 url = 'http://cpu1.ms.wyue.site:8000/process'
 import time
 from yue.objectives import AnolyteLabeler
-
+import numpy as np
+from tqdm import tqdm
 def get_evaluation(evaluate_metric, smiles):
     data = {
         "ops": evaluate_metric,
@@ -13,9 +14,9 @@ def get_evaluation(evaluate_metric, smiles):
     result = response.json()['results']
     return result
 
-from tdc import Oracle
+from tdc import Oracle, Evaluator
 class RewardingSystem:
-    def __init__(self):
+    def __init__(self,use_tqdm=False,chunk_size=20):
         tdc_func = ['GSK3B','JNK3','DRD2','SA',
                     'QED','LogP','Celecoxib_Rediscovery','Troglitazone_Rediscovery',
                     'Thiothixene_Rediscovery',
@@ -24,6 +25,7 @@ class RewardingSystem:
                     'Osimertinib_MPO','Fexofenadine_MPO','Ranolazine_MPO',
                     'Perindopril_MPO','Amlodipine_MPO','Sitagliptin_MPO',
                     'Zaleplon_MPO','Valsartan_SMARTS','Scaffold Hop',]
+        tdc_evaluator = ['Diversity','Uniqueness','Validity','Novelty']
         self.all_rewards = {
             name.lower():Oracle(name=name) for name in tdc_func
         }
@@ -33,6 +35,11 @@ class RewardingSystem:
         self.all_rewards['logs'] = self.remote_labeler.log_s_endpoint.observe
         self.all_rewards['smarts_filter'] = self.remote_labeler.get_filter_results
         self.all_rewards['reduction_potential'] = self.remote_labeler.red_pot_endpoint.observe
+        self.all_evaluators={
+            name.lower():Evaluator(name=name) for name in tdc_evaluator
+        }
+        self.use_tqdm = use_tqdm
+        self.chunk_size=chunk_size
     
 
     def register_reward(self, reward_name, reward_function):
@@ -40,10 +47,24 @@ class RewardingSystem:
 
     def get_reward(self, reward_name, items):
         if reward_name in ['similarity']:
-            return self.all_rewards[reward_name](items)
+            new_items = items
         else:
             new_items = [i[1] for i in items]
-            return self.all_rewards[reward_name](new_items)
+
+        results = []
+        chunk_size = self.chunk_size
+        if self.use_tqdm:
+            for i in tqdm(range(0, len(new_items), chunk_size)):
+                chunk = new_items[i:i+chunk_size]
+                result = self.all_rewards[reward_name](chunk)
+                results.append(result)
+        else:
+            for i in range(0, len(new_items), chunk_size):
+                chunk = new_items[i:i+chunk_size]
+                result = self.all_rewards[reward_name](chunk)
+                results.append(result)
+
+        return np.concatenate(results)
     
     def evaluate(self,ops,smiles_list):
         results = {}

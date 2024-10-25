@@ -1,7 +1,6 @@
 import os
 from openai import AzureOpenAI
 from azure.identity import AzureCliCredential, ChainedTokenCredential, DefaultAzureCredential, get_bearer_token_provider
-from openai import AzureOpenAI
 class LLM:
     def __init__(self,model='chatgpt'):
         self.model_choice = model

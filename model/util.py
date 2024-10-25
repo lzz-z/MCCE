@@ -9,7 +9,7 @@ def fast_non_dominated_sort(population):
         n[p] = 0
         for q in range(len(population)):
             if dominates(population[p], population[q]):
-                S[p].append(q)
+                S[p].append(q) 
             elif dominates(population[q], population[p]):
                 n[p] += 1
         if n[p] == 0:
@@ -19,7 +19,7 @@ def fast_non_dominated_sort(population):
     i = 0
     while len(front[i]) != 0:
         Q = []
-        for p in front[i]:
+        for p in front[i]: # p: non dominated
             for q in S[p]:
                 n[q] -= 1
                 if n[q] == 0:
@@ -55,7 +55,7 @@ def crowding_distance_assignment(front, population):
 
     return distances
 
-def nsga2_selection(population, pop_size):
+def nsga2_selection(population, pop_size,return_fronts=False):
     fronts = fast_non_dominated_sort(population)
     new_population = []
     for front in fronts:
@@ -65,7 +65,8 @@ def nsga2_selection(population, pop_size):
             new_population.extend(sorted_front[:pop_size - len(new_population)])
         else:
             new_population.extend(front)
-    
+    if return_fronts:
+        return [population[i] for i in new_population],fronts
     return [population[i] for i in new_population]
 
 def so_selection(population, pop_size):
@@ -74,11 +75,3 @@ def so_selection(population, pop_size):
     # Sort the items by their score (ascending order) based on the first (and only) element in the scores list
     sorted_items = sorted(population, key=lambda item: item.scores[0])
     return sorted_items[:pop_size]
-
-def prepare_init_prompt(prompt,values,history):
-
-    return final_prompt
-
-def prepare_ee_prompt(prompt,values,history):
-
-    return final_prompt

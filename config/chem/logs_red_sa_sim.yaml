@@ -2,7 +2,7 @@ model:
   name: chatgpt
   prompt_module: Prompt
 
-goals: [smarts_filter,logs,reduction_potential,sa,similarity]
+goals: [logs,reduction_potential,sa,similarity]
 
 optimization: 
   pop_size: 20

@@ -17,6 +17,9 @@ def judge(requirement,input_mol_value,output_mol_value):
         return (input_mol_value == output_mol_value)
     if metas[0] == 'equal':
         return (output_mol_value == float(metas[1]))
+    if metas[0] == 'towards':
+        towards_value = float(metas[1])
+        return (abs(output_mol_value-towards_value)<abs(input_mol_value-towards_value))
     if len(metas) < 3 and metas[0] in ['increase','decrease']: # examples:  'increase, >=2' ,'decrease, >=2'
         direction = metas[0]
         if len(metas) == 1:
@@ -54,6 +57,7 @@ import numpy as np
 url = 'http://cpu1.ms.wyue.site:8000/process'
 import time
 
+
 def get_evaluation(evaluate_metric, smiles):
     data = {
         "ops": evaluate_metric,
@@ -72,7 +76,7 @@ def mean_sr(r,num_candiate=5):
     k = r.clip(0,num_candiate)
     new_sr = k.sum()/ (len(k)*num_candiate)
     return r.mean(), (r>0).sum()/len(r),new_sr
-
+from algorithm.base import Item
 def eval_mo_results(dataset,obj,ops=['qed','logp','donor']):
     hist_success_times = []
     prompts = dataset['prompts']
@@ -97,7 +101,6 @@ def eval_mo_results(dataset,obj,ops=['qed','logp','donor']):
 
 def eval_one(ops,requs,input_mol,output_mol):
     for op in ops:
-        
         if op=='similarity':
             if not judge('range, 0.4, 1', input_mol.property[op],output_mol.property[op]):
                 return False

@@ -10,13 +10,24 @@ class Prompt:
     def get_final_prompt(self):
         pass 
     
-    def get_crossover_prompt(self,ind_list):
+    def get_crossover_prompt(self,ind_list,history_moles):
         requirement_prompt = self.make_requirement_prompt(self.original_mol,self.requirements,self.property)
-        description_prompt = self.make_description_prompt()
+        
         history_prompt = self.make_history_prompt(ind_list)
         instruction_prompt = self.make_instruction_prompt()
-        final_prompt =requirement_prompt + description_prompt +  history_prompt +  instruction_prompt 
+        description_prompt = self.make_description_prompt()
+        mole_history_prompt = self.make_mole_history_prompt(history_moles)
+        final_prompt =requirement_prompt + description_prompt +  history_prompt +  instruction_prompt #+ mole_history_prompt
+        #final_prompt =requirement_prompt  +  history_prompt +  instruction_prompt 
         return final_prompt
+
+    def make_mole_history_prompt(self,moles):
+        if len(moles) == 0 :
+            return ""
+        sentence = "Make sure you don't propose the following molecules: \n"
+        for mole in moles:
+            sentence += f"<mol>{mole}</mol>  "
+        return sentence + '\n'
 
     def make_description_prompt(self):
         prompt = ""
@@ -24,16 +35,16 @@ class Prompt:
             prompt += p + ': ' + descriptions[p] + '\n'
         return prompt
 
-    def make_history_prompt(self, ind_list):
+    def make_history_prompt(self, ind_list): # parent
         pop_content = "I have some molecules with their objective values. \n"
         for ind in ind_list:
             pop_content += f"<mol>{ind.value}</mol>, its property values are: "
             for index,property in enumerate(ind.property_list):
                 pop_content += f"{property}:{ind.raw_scores[index]:.4f},  "
-            pop_content += '\n'
+            pop_content += f'total: {ind.total:.4f}\n'
         return pop_content
     
-    def make_instruction_prompt(self):
+    def make_instruction_prompt(self): # improvement score = point hypervolume
         prompt = ("Give me 2 new molecules that are different from all points above, and not dominated by any of the above. \n"
         "You can do it by applying crossover on the points I give to you. \n"
         "Do not write code. Do not give any explanation. Each output new molecule must start with <mol> and end with </mol> in SIMLE form"
@@ -44,14 +55,12 @@ class Prompt:
     def make_requirement_prompt(self,original_mol,requirements,properties):
         sentences = []
         number = 1
-        
         for property in properties:
             if property == 'similarity':
-                sentence = f"make sure the new molecules you propose has a similarity of over 0.4 to our original molecule"
+                sentence = f"make sure the new molecules you propose has a similarity of over 0.4 to our original molecule <mol>{original_mol.value}</mol>"
             else:
                 value = requirements[property+'_requ']
                 property_name = value["property"]
-                source_smiles = value["source_smiles"]
                 requirement = value["requirement"]
 
                 # Check for specific requirement patterns directly using symbols
@@ -84,6 +93,9 @@ class Prompt:
                 elif "equal" in requirement:
                     equal_value = requirement.split(",")[1]
                     sentence = f"make sure {property_name} equals {equal_value}."
+                elif "towards" in requirement:
+                    equal_value = requirement.split(",")[1]
+                    sentence = f"make sure {property_name} is towards {equal_value}."
                 elif "the same" in requirement:
                     sentence = f"keep the {property_name} value the same."
                 elif any(op in requirement for op in [">=", "<=", "=", ">", "<"]):
@@ -96,7 +108,8 @@ class Prompt:
         init_sentence = f'Based on molecule <mol>{original_mol.value}</mol>, its property values are: '
         for k,v in original_mol.property.items():
             init_sentence += f'{k}:{v:.4f}, '
-        sentences = init_sentence + f'suggest new molecules that satisfy the following requirements: \n' + '\n'.join(sentences) +'\n'
+        #sentences = init_sentence + f'suggest new molecules that satisfy the following requirements: \n' + '\n'.join(sentences) +'\n'
+        sentences = f'suggest new molecules that satisfy the following requirements: \n' + '\n'.join(sentences) +'\n'
         return sentences
 
 descriptions = {
@@ -120,6 +133,87 @@ descriptions = {
         "structures, and Tanimoto similarity measures how structurally similar two molecules are based on their fingerprints."
         "Modifying the core structure of a molecule significantly (e.g., ring opening or closing) decreases similarity,"
             "while smaller changes like side-chain substitutions tend to have a lesser impact on similarity."),
+    "logs":(
+        "Log S indicates the solubility of a molecule in water, with higher values showing better solubility. "
+        "Adding polar functional groups (like -OH or -COOH) can increase Log S, while adding hydrophobic groups "
+        "(like long alkyl chains) can decrease it."
+    ),
+    "reduction_potential":(
+        "Reduction potential quantifies a molecule's tendency to gain electrons and undergo reduction. Introducing "
+        "electron-withdrawing groups (like -NO2) can increase reduction potential, while adding electron-donating groups "
+        "(like -OH or -CH3) can decrease it."
+    ),
+    "sa":(
+        "SA measures how easily a molecule can be synthesized based on its structural complexity. Simplifying "
+        "a molecule by reducing complex ring systems or functional groups can lower SA, making synthesis easier, "
+        "while adding complex structures can increase SA, making synthesis harder."
+    ),
+    "drd2":(
+        "Dopamine receptor D2 (DRD2) is a receptor involved in the modulation of neurotransmission and is a target for various psychiatric and neurological disorders. "
+        "Adding functional groups like hydroxyl or halogen atoms to aromatic rings can enhance binding affinity to DRD2. "
+        "Removing aromaticity or introducing bulky groups near the binding sites often decreases DRD2 activity."
+    ),
+    "gsk3b":(
+        "Glycogen synthase kinase-3 beta (GSK3β) is an enzyme involved in cellular processes like metabolism and apoptosis, and is a therapeutic target for cancer and neurological diseases."
+        "Adding polar groups, such as hydroxyls, can improve hydrogen bonding with GSK3β's active site."
+        "Introducing steric hindrance or highly hydrophobic regions can reduce interactions with GSK3β."
+    ),
+    "jnk3":(
+        "c-Jun N-terminal kinase 3 (JNK3) is a kinase involved in stress signaling and is targeted for neuroprotection in diseases like Alzheimer's."
+        "Introducing small polar or electronegative groups can enhance binding affinity to JNK3."
+        "Removing polar functional groups or adding large, bulky substituents can reduce activity by obstructing the active site."
+    ),
+    "smarts_filter":(
+        "To pass the SMARTS filter, the proposed molecule must not have the following substructures:"
+        "reactive alkyl halides: [Br,Cl,I][CX4;CH,CH2]"
+        "acid halides: [S,C](=[O,S])[F,Br,Cl,I]"
+        "carbazides: O=CN=[N+]=[N-]"
+        "sulphate esters: COS(=O)O[C,c]"
+        "sulphonates: COS(=O)(=O)[C,c]"
+        "acid anhydrides: C(=O)OC(=O)"
+        "peroxides: OO"
+        "pentafluorophenyl esters: C(=O)Oc1c(F)c(F)c(F)c(F)c1(F)"
+        "esters of HOBT: C(=O)Onnn"
+        "isocyanates & isothiocyanates: N=C=[S,O]"
+        "triflates: OS(=O)(=O)C(F)(F)F"
+        "lawesson's reagent and derivatives: P(=S)(S)S"
+        "phosphoramides: NP(=O)(N)N"
+        "aromatic azides: cN=[N+]=[N-]"
+        "acylhydrazide: [N;R0][N;R0]C(=O)"
+        "quaternary C, Cl, I, P or S: [C+,Cl+,I+,P+,S+]"
+        "phosphoranes: C=P"
+        "chloramidines: [Cl]C([C&R0])=N"
+        "nitroso: [N&D2](=O)"
+        "P/S Halides: [P,S][Cl,Br,F,I]"
+        "carbodiimide: N=C=N"
+        "isonitrile: [N+]#[C-]"
+        "triacyloximes: C(=O)N(C(=O))OC(=O)"
+        "cyanohydrins: N#CC[OH]"
+        "acyl cyanides: N#CC(=O)"
+        "sulfonyl cyanides: S(=O)(=O)C#N"
+        "cyanophosphonates: P(OCC)(OCC)(=O)C#N"
+        "azocyanamides: [N;R0]=[N;R0]C#N"
+        "azoalkanals: [N;R0]=[N;R0]CC=O"
+        "epoxides, thioepoxides, aziridines: C1[O,S,N]C1"
+        "esters, thioesters: C[O,S;R0][C;R0](=[O,S])"
+        "cyanamides: NC#N"
+        "four membered lactones: C1(=O)OCC1"
+        "betalactams: N1CCC1=O"
+        "di and triphosphates: P(=O)([OH])OP(=O)[OH]"
+        "acyclic C=C-O: C=[C!r]O"
+        "amidotetrazole: c1nnnn1C=O"
+        "azo group: N#N"
+        "hydroxamic acid: C(=O)N[OH]"
+        "imine: C=[N!R]"
+        "imine: N=[CR0][N,n,O,S]"
+        "ketene: C=C=O"
+        "nitro group: [N+](=O)[O-]"
+        "N-nitroso: [#7]-N=O"
+        "oxime: [C,c]=N[OH]"
+        "oxime: [C,c]=NOC=O"
+        "Oxygen-nitrogen single bond: [OR0,NR0][OR0,NR0]"
+        "perfluorinated chain: [CX4](F)(F)[CX4](F)F"
+    )
 }
 
 metadata = {

@@ -1,0 +1,36 @@
+<mol>Cc1cc(O)cc(C(N)=[NH2+])c1</mol> <mol>Oc1ccc(N)cc1</mol> <mol>Oc1cc(O)ccc1N</mol> <mol>CNc1ccc(O)cc1</mol> <mol>Cc1ccc(N)cc1</mol>
+
+<mol>O=C(O)c1ccc(C#N)cc1</mol> <mol>O=C(O)c1ccc(Cl)cc1</mol> <mol>O=S(=O)(O)c1ccccc1</mol> <mol>Oc1ccc(C=O)cc1</mol> <mol>O=C(N)c1ccc(O)cc1</mol>
+
+<mol>O=C(O)c1ccncc1</mol> <mol>O=C(O)c1ncccc1</mol> <mol>O=C(O)c1ccc(F)cc1</mol> <mol>O=C(O)c1ccc(C(F)(F)F)cc1</mol> <mol>O=C(O)c1ccccc1</mol>
+
+<mol>NCC(=O)O</mol> <mol>NC(=O)N</mol> <mol>NC(=O)C(=O)N</mol> <mol>NCCN</mol> <mol>NC(=N)N</mol>
+
+<mol>OCCN</mol> <mol>OCCCN</mol> <mol>CC(O)CN</mol> <mol>CC(N)CO</mol> <mol>NCC(O)CO</mol>
+
+<mol>Oc1ccncc1</mol> <mol>O=C(O)c1ccncc1</mol> <mol>Nc1ccncc1</mol> <mol>Cc1ccncc1</mol> <mol>c1ccncc1</mol>
+
+<mol>O=C(O)C(=O)O</mol> <mol>O=C(O)CC(=O)O</mol> <mol>O=C(O)C(O)C(=O)O</mol> <mol>O=C(O)C(O)C(O)C(=O)O</mol> <mol>O=C(O)C(N)C(=O)O</mol>
+
+<mol>CC(=O)O</mol> <mol>CC(O)C(=O)O</mol> <mol>CC(=O)C(=O)O</mol> <mol>OCCO</mol> <mol>OCC(O)CO</mol>
+
+<mol>O=C(NCCO)c1ccccc1</mol> <mol>O=C(NCCO)c1ccc(O)cc1</mol> <mol>O=C(NCCO)c1ccc(C#N)cc1</mol> <mol>O=C(NCCO)c1ccc(N)cc1</mol> <mol>O=C(NCCO)C#N</mol>
+
+<mol>O=C(O)c1cccnc1</mol> <mol>O=C(O)c1ccncc1F</mol> <mol>O=C(O)c1ccc(Br)cc1</mol> <mol>O=C(O)C=C</mol> <mol>O=C(O)C=C(O)C(=O)O</mol>
+
+<mol>CO</mol> <mol>CCO</mol> <mol>OCC(O)CO</mol> <mol>CC(=O)N</mol> <mol>C(=O)N</mol>
+
+<mol>N#CCC(=O)O</mol> <mol>O=C(O)CCN</mol> <mol>O=C(O)CC(=O)O</mol> <mol>O=C(O)C(N)C(=O)O</mol> <mol>O=C(O)CC(=O)N</mol>
+
+<mol>O=C(O)CCO</mol> <mol>N#CCCO</mol> <mol>NCCC(=O)O</mol> <mol>N#CCCC(=O)O</mol> <mol>O=C(O)CCC(=O)O</mol>
+
+<mol>OCC(=O)O</mol> <mol>OCC(=O)CO</mol> <mol>NCCCO</mol> <mol>NCCCN</mol> <mol>CC(=O)C(=O)O</mol>
+
+<mol>Oc1ccc(F)cc1</mol> <mol>O=C(O)c1ccc(O)cc1</mol> <mol>CC(=O)c1ccc(O)cc1</mol> <mol>O=CC1=CC=C(O)C=C1</mol> <mol>O=C(O)CC1=CC=C(O)C=C1</mol>
+
+<mol>O=C(O)c1ccnc(F)c1</mol> <mol>O=C(N)c1ccnc(F)c1</mol> <mol>O=C(O)c1ccncc1F</mol> <mol>O=C(O)c1ccnc(Cl)c1</mol> <mol>O=C(O)c1ccncc1</mol>
+
+<mol>CN=C(N)NCCO</mol> <mol>CCN=C(N)N</mol> <mol>NC(=N)NCCO</mol> <mol>CC(C)N=C(N)N</mol> <mol>CN=C(N)NCCN</mol>
+
+<mol>CC(=O)C(=O)O</mol> <mol>CC(=O)CC(=O)O</mol> <mol>CC(=O)C(=O)C(=O)O</mol> <mol>CC(=O)CC(=O)C(=O)O</mol> <mol>CC(=O)C(O)C(=O)O</mol>
+

@@ -1,8 +1,12 @@
+from model.util import nsga2_selection
+import pygmo as pg
+import numpy as np
 class Prompt:
     def __init__(self,original_mol,requirements,properties):
         self.requirements = requirements
         self.property = properties
         self.original_mol = original_mol
+        self.experience = None
 
     def get_first_prompt(self):
         pass
@@ -10,6 +14,15 @@ class Prompt:
     def get_final_prompt(self):
         pass 
     
+    def get_mutation_prompt(self,ind_list,history_moles):
+        requirement_prompt = self.make_requirement_prompt(self.original_mol,self.requirements,self.property)
+        
+        history_prompt = self.make_history_prompt(ind_list[:1])
+        instruction_prompt = self.make_instruction_prompt(mutation=True)
+        description_prompt = self.make_description_prompt()
+        final_prompt =requirement_prompt + description_prompt +  history_prompt +  instruction_prompt 
+        return final_prompt
+
     def get_crossover_prompt(self,ind_list,history_moles):
         requirement_prompt = self.make_requirement_prompt(self.original_mol,self.requirements,self.property)
         
@@ -17,7 +30,10 @@ class Prompt:
         instruction_prompt = self.make_instruction_prompt()
         description_prompt = self.make_description_prompt()
         mole_history_prompt = self.make_mole_history_prompt(history_moles)
-        final_prompt =requirement_prompt + description_prompt +  history_prompt +  instruction_prompt #+ mole_history_prompt
+        if self.experience is not None:
+            final_prompt =requirement_prompt + description_prompt +  history_prompt + self.experience + instruction_prompt
+        else:
+            final_prompt =requirement_prompt + description_prompt +  history_prompt +  instruction_prompt
         #final_prompt =requirement_prompt  +  history_prompt +  instruction_prompt 
         return final_prompt
 
@@ -35,8 +51,11 @@ class Prompt:
             prompt += p + ': ' + descriptions[p] + '\n'
         return prompt
 
-    def make_history_prompt(self, ind_list): # parent
-        pop_content = "I have some molecules with their objective values. \n"
+    def make_history_prompt(self, ind_list, experience=False): # parent
+        if experience:
+            pop_content = ""
+        else:
+            pop_content = "I have some molecules with their objective values. \n"
         for ind in ind_list:
             pop_content += f"<mol>{ind.value}</mol>, its property values are: "
             for index,property in enumerate(ind.property_list):
@@ -44,13 +63,51 @@ class Prompt:
             pop_content += f'total: {ind.total:.4f}\n'
         return pop_content
     
-    def make_instruction_prompt(self): # improvement score = point hypervolume
-        prompt = ("Give me 2 new molecules that are different from all points above, and not dominated by any of the above. \n"
-        "You can do it by applying crossover on the points I give to you. \n"
-        "Do not write code. Do not give any explanation. Each output new molecule must start with <mol> and end with </mol> in SIMLE form"
-        )
+    def make_instruction_prompt(self,mutation=False): # improvement score = point hypervolume
+        if mutation:
+            prompt = ("Give me 2 new/novel better molecules that are different from all points above, and not dominated by any of the above. \n"
+            "You can do it by applying mutation on the given points and based on your knowledge. The molecule should be valid. \n"
+            "Do not write code. Do not give any explanation. Each output new molecule must start with <mol> and end with </mol> in SIMLE form"
+            )
+        else:
+            prompt = ("Give me 2 new better molecules that are different from all points above, and not dominated by any of the above. \n"
+            "You can do it by applying crossover on the given points and based on your knowledge. The molecule should be valid. \n"
+            "Do not write code. Do not give any explanation. Each output new molecule must start with <mol> and end with </mol> in SIMLE form"
+            )
         return prompt
     
+    def make_experience_prompt(self,all_mols):
+        best10 = sorted(all_mols, key=lambda item: item.total, reverse=True)[:10]
+        worst10 = sorted(all_mols, key=lambda item: item.total, reverse=True)[-10:]
+        best10, fronts = nsga2_selection(all_mols,pop_size=10,return_fronts=True)
+        '''best100,fronts = nsga2_selection(all_mols,pop_size=100,return_fronts=True)
+        if len(fronts[0])<=10:
+            best10 = [all_mols[i] for i in fronts[0]]
+        else:
+            tmpidx = fronts[0]
+            points = []
+            scores = []
+            for idx in tmpidx:
+                scores.append(all_mols[idx].scores)
+                points.append(all_mols[idx])
+            scores = np.stack(scores)
+            hv_pygmo = pg.hypervolume(scores)
+            hvc = hv_pygmo.contributions(np.array([1.0 for i in range(scores.shape[1])]))
+
+            sorted_indices = np.argsort(hvc)[::-1]  # Reverse to sort in descending order
+            best10 = [points[i] for i in sorted_indices[:10]]'''
+
+        requirement_prompt = self.make_requirement_prompt(self.original_mol,self.requirements,self.property)
+        history_prompt = self.make_history_prompt(best10,experience=True)
+        bad_history_prompt = self.make_history_prompt(worst10,experience=True)
+        prompt = "I am optimizing molecular properties, the requirements are in the following: \n" + requirement_prompt + "\n"
+        prompt = prompt + "I have already obtained some excellent non-dominated molecules with its property values:" + history_prompt + "\n"
+        prompt = prompt + "I also have some worst molecules with its property values:" + history_prompt + "\n"
+        prompt = prompt + "now summarize the experience of the excellence of these molecules and how can we create novel molecules that are excellent like these."
+        prompt = prompt + "And also summarize the why molecules have bad propeties and how to avoid them."
+        prompt = prompt + "Keep the experience in 400 words, don't be too long and repetitive."
+        return prompt,history_prompt
+
 
     def make_requirement_prompt(self,original_mol,requirements,properties):
         sentences = []

@@ -46,8 +46,8 @@ class SmartsFilterset:
         for filter in self.smarts_filters.smarts:
             filter_pattern = AllChem.MolFromSmarts(filter)
             if mol.HasSubstructMatch(filter_pattern):
-                return False
-        return True
+                return True
+        return False
 
     def apply_filters(self, input_data: List[str]) -> List[bool]:
         """

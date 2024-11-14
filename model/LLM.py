@@ -17,7 +17,7 @@ class LLM:
 
     def _init_chatgpt(self):
         # Set the necessary variables
-        resource_name = "gcrgpt4aoai2c"
+        resource_name = "sfm-openai-sweden-central"#"gcrgpt4aoai2c"
         endpoint = f"https://{resource_name}.openai.azure.com/"
         api_version = "2024-02-15-preview"  # Replace with the appropriate API version
 
@@ -51,6 +51,7 @@ class LLM:
         completion = self.model.chat.completions.create(
             model="gpt-4o",
             messages=[
+                {"role": "system", "content": "You are a helpful assistant who can propose novel and powerful molecules based on your domain knowledge."},
                 {
                     "role": "user",
                     "content": content,

@@ -2,7 +2,7 @@ import requests
 import json
 url = 'http://cpu1.ms.wyue.site:8000/process'
 import time
-from yue.objectives import AnolyteLabeler
+
 import numpy as np
 from tqdm import tqdm
 def get_evaluation(evaluate_metric, smiles):
@@ -16,7 +16,7 @@ def get_evaluation(evaluate_metric, smiles):
 
 from tdc import Oracle, Evaluator
 class RewardingSystem:
-    def __init__(self,use_tqdm=False,chunk_size=20):
+    def __init__(self,use_tqdm=False,chunk_size=20,material=False):
         tdc_func = ['GSK3B','JNK3','DRD2','SA',
                     'QED','LogP','Celecoxib_Rediscovery','Troglitazone_Rediscovery',
                     'Thiothixene_Rediscovery',
@@ -31,10 +31,12 @@ class RewardingSystem:
         }
         self.all_rewards['similarity'] = morgan_similarity
         self.all_rewards['donor'] = donor_number
-        self.remote_labeler = AnolyteLabeler()
-        self.all_rewards['logs'] = self.remote_labeler.log_s_endpoint.observe
-        self.all_rewards['smarts_filter'] = self.remote_labeler.get_filter_results
-        self.all_rewards['reduction_potential'] = self.remote_labeler.red_pot_endpoint.observe
+        if material:
+            from yue.objectives import AnolyteLabeler
+            self.remote_labeler = AnolyteLabeler()
+            self.all_rewards['logs'] = self.remote_labeler.log_s_endpoint.observe
+            self.all_rewards['smarts_filter'] = self.remote_labeler.get_filter_results
+            self.all_rewards['reduction_potential'] = self.remote_labeler.red_pot_endpoint.observe
         self.all_evaluators={
             name.lower():Evaluator(name=name) for name in tdc_evaluator
         }

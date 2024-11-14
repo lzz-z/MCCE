@@ -17,7 +17,7 @@ data = MolGen(name='ZINC')
 split = data.get_split()
 moles_df = split['train']
 
-smiles = moles_df.sample(10000).smiles.values
+smiles = moles_df.sample(100000).smiles.values
 bad_smiles = []
 index = 0
 while True:
@@ -45,32 +45,56 @@ reduction_potential -4.990693092346191 -0.9798483848571777    to -1.3
 smarts_filter 0.0 1.0    # 0 pass
 logs -7.43935489654541 0.47240304946899414 # max
 '''
-'''
+
 import pandas as pd
 from algorithm.MOO import MOO
 from algorithm.base import Item
 from model.MOLLM import ConfigLoader
 from rewards.system import RewardingSystem
-smiles_df = pd.read_csv('/home/v-nianran/src/MOLLM/data/smiles1960.csv')
-smiles = smiles_df.smiles.values
-config = ConfigLoader('/home/v-nianran/src/MOLLM/config/chem/filter_logs_red_sa.yaml')
+#smiles_df = pd.read_csv('/home/v-nianran/src/MOLLM/data/smiles1960.csv')
+#smiles = smiles_df.smiles.values
+from tdc.generation import MolGen
+data = MolGen(name='ZINC')
+split = data.get_data()
+smiles = split.smiles.values
+
+config = ConfigLoader('/home/v-nianran/src/MOLLM/config/yue/sa_drd2_qed_2.yaml')
 property_list = config.get('goals')
 print(property_list)
-moo = MOO(RewardingSystem(), llm=None,property_list=property_list,config=config)
+moo = MOO(RewardingSystem(use_tqdm=True,chunk_size=1000), llm=None,property_list=property_list,config=config,seed=42)
 items = [Item(i,property_list) for i in smiles]
 moo.original_mol = items[0]
-import json
-with open("/home/v-nianran/src/MOLLM/data/chem300.json", 'r') as json_file:
-    dataset= json.load(json_file)
-requirement = dataset['requirements'][0]
+requirement = {
+            "qed_requ": {
+                "property": "QED",
+                "requirement": "increase"
+            },
+            "drd2_requ": {
+                "property": "DRD2",
+                "requirement": "decrease"
+            },
+            "sa_requ": {
+                "property": "SA",
+                "requirement": "decrease"
+            },
+            "gsk3b_requ": {
+                "property": "GSK3\u03b2",
+                "requirement": "decrease"
+            },
+            "jnk3_requ": {
+                "property": "JNK3",
+                "requirement": "increase"
+            }
+        }
 moo.requirement_meta = requirement
 moo.evaluate_all(items)
-best300 = moo.select_next_population(items,[],300)
-filepath = 'data/best300.pkl'
+#best300 = moo.select_next_population(items,[],300)
+filepath = 'data/zinc250_5goals.pkl'
+#for mol in items:
+#    print(mol.property)
 import pickle
 def save_to_pkl( filepath):
     data = {
-        'best300':best300,
         'all':items
     }
     with open(filepath, 'wb') as f:
@@ -183,3 +207,4 @@ if __name__ == '__main__':
     #eval_strings(input_path,output_path)
     llm = LLM()
     print(llm.chat('who are you?'))
+'''

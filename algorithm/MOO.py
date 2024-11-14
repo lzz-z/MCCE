@@ -67,16 +67,22 @@ class MOO:
     def init_mol_dataset(self):
         print('Loading ZINC dataset...')
         data = MolGen(name='ZINC')
-        split = data.get_split()
-        self.moles_df = split['train']
+        self.moles_df = data.get_data()
 
     def generate_initial_population(self, mol1, n):
-        
-        with open("/home/v-nianran/src/MOLLEO/multi_objective/ini_smiles",'r') as f:
-            smiles = f.readlines()
-        smiles = [i.replace('\n','') for i in smiles]
-        print(f'{len(smiles)} items for init pops')
-        return [Item(i,self.property_list) for i in smiles]
+        with open('/home/v-nianran/src/MOLLEO/multi_objective/ini_smiles','r') as f:
+            a = f.readlines()
+        a = [i.replace('\n','') for i in a]
+        return [Item(i,self.property_list) for i in a]
+
+
+        '''
+        filepath = '/home/v-nianran/src/MOLLM/data/zinc250_5goals.pkl'
+        with open(filepath, 'rb') as f:
+            all_mols_zinc = pickle.load(f)
+        print(f"init pop loaded from to {filepath}")
+        # return all_mols_zinc['worst500'][-100:]
+        return all_mols_zinc['best500'][:100]'''
 
         top_n = self.moles_df.sample(n - 1).smiles.values.tolist()
         top_n.append(mol1)
@@ -98,6 +104,14 @@ class MOO:
         top_n = self.moles_df.nlargest(n - 1, 'similarity').smiles.values.tolist()
         top_n.append(mol1)
         return [Item(i,self.property_list) for i in top_n]
+
+    def mutation(self, parent_list):
+        prompt = self.prompt_generator.get_mutation_prompt(parent_list,self.history_moles)
+        #print(prompt,'\n\n')
+        #assert False
+        response = self.llm.chat(prompt)
+        new_smiles = extract_smiles_from_string(response)
+        return [Item(smile,self.property_list) for smile in new_smiles],prompt,response
 
     def crossover(self, parent_list):
         prompt = self.prompt_generator.get_crossover_prompt(parent_list,self.history_moles)
@@ -173,7 +187,7 @@ class MOO:
         for i in pops:
             if i.value not in self.history_moles:
                 self.history_moles.append(i.value)
-                self.all_mols.append(i)
+            self.all_mols.append(i)
 
     def log(self):
         top100 = sorted(self.all_mols, key=lambda item: item.total, reverse=True)[:100]
@@ -182,11 +196,18 @@ class MOO:
         avg_top100 = np.mean([i.total for i in top100])
         avg_sa = np.mean([i.property['sa'] for i in top100])
         diversity_top100 = self.reward_system.all_evaluators['diversity']([i.value for i in top100])
+
+        already = 0
+        all_zinc_mols = self.moles_df.smiles.values
+        for i in self.all_mols:
+            if i.value in all_zinc_mols:
+                already += 1 
         self.results_dict.append(
-            {   'all_moles': len(self.history_moles),
+            {   'all_unique_moles': len(self.history_moles),
                 'llm_calls': self.llm_calls,
-                'repeat_num':self.repeat_num,
-                'failed_num':self.failed_num,
+                'Uniqueness':1-self.repeat_num/(self.llm_calls*2+1e-6),
+                'Validity':1-self.failed_num/(self.llm_calls*2+1e-6),
+                'Novelty':1-already/(self.llm_calls*2+1e-6),
                 'avg_top1':top10[0].total,
                 'avg_top10':avg_top10,
                 'avg_top100':avg_top100,
@@ -197,13 +218,25 @@ class MOO:
         with open(json_path,'w') as f:
             json.dump(self.results_dict, f, indent=4)
         print(f'{len(self.history_moles)}/{self.budget} | '
-                f'llm_calls/repeat/failed {self.llm_calls}/{self.repeat_num}/{self.failed_num} | '
+                f'Uniqueness:{1-self.repeat_num/(self.llm_calls*2+1e-6)} | '
+                f'Validity:{1-self.failed_num/(self.llm_calls*2+1e-6)} | '
+                f'Novelty:{1-already/(self.llm_calls*2+1e-6)} | '
+                f'llm_calls: {self.llm_calls} | '
                 f'avg_top1: {top10[0].total:.3f} | '
                 f'avg_top10: {avg_top10:.3f} | '
                 f'avg_top100: {avg_top100:.3f} | '
                 f'avg_sa: {avg_sa:.3f} | '
                 f'div: {diversity_top100:.3f}')
 
+    def generate_experience(self):
+        if np.random.random()>0.5:
+            self.prompt_generator.experience = None
+            print('no experience this generation')
+        else:
+            prompt,best_moles_prompt = self.prompt_generator.make_experience_prompt(self.all_mols)
+            response = self.llm.chat(prompt)
+            self.prompt_generator.experience= best_moles_prompt + "\n I have some experience of proposing such best molecules, you can take advantage of my best molecules and experience: \n" + response + "\n"
+            print('length exp:',len(self.prompt_generator.experience))
 
     def run(self, prompt,requirements):
         """High level logic"""
@@ -231,6 +264,7 @@ class MOO:
             offspring = self.generate_offspring(population, offspring_times)
             population = self.select_next_population(population, offspring, self.pop_size)
             self.log()
+            #self.generate_experience()
             if len(self.all_mols) >= self.budget:
                 break
         print(f'=======> total running time { (time.time()-start_time)/3600 :.2f} hours <=======')
@@ -255,7 +289,13 @@ class MOO:
         while True:
             try:
                 with concurrent.futures.ThreadPoolExecutor() as executor:
-                    futures = [executor.submit(self.crossover, parent_list=parent_list) for parent_list in parents]
+                    futures = []
+                    for parent_list in parents:
+                        if np.random.random()<1.5:
+                            futures.append(executor.submit(self.crossover, parent_list=parent_list))
+                        else:
+                            futures.append(executor.submit(self.mutation, parent_list=parent_list))
+                    #futures = [executor.submit(self.crossover, parent_list=parent_list) for parent_list in parents]
                     results = [future.result() for future in futures]
                     children, prompts, responses = zip(*results) #[[item,item],[item,item]] # ['who are you value 1', 'who are you value 2'] # ['yes, 'no']
                     self.llm_calls += len(results)

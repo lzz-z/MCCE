@@ -19,6 +19,7 @@ import time
 from model.util import nsga2_selection,so_selection
 from algorithm import PromptTemplate
 from eval import judge
+import pygmo as pg
 import pickle
 def set_seed(seed):
     random.seed(seed)
@@ -59,7 +60,8 @@ class MOO:
         self.failed_moles = []
         self.history_moles = []
         self.all_mols = []
-        self.results_dict = []
+        self.results_dict = {'results':[]}
+        self.history_experience = []
         self.repeat_num = 0
         self.failed_num = 0
         self.llm_calls = 0
@@ -70,19 +72,37 @@ class MOO:
         self.moles_df = data.get_data()
 
     def generate_initial_population(self, mol1, n):
+        '''
         with open('/home/v-nianran/src/MOLLEO/multi_objective/ini_smiles','r') as f:
             a = f.readlines()
         a = [i.replace('\n','') for i in a]
         return [Item(i,self.property_list) for i in a]
-
-
         '''
+        '''
+        with open('/home/v-nianran/src/MOLLM/data/scaffold_smiles.txt','r') as f:
+            smiles = f.readlines()
+        smiles = [smile.replace('\n','') for smile in smiles]
+        top_n = self.moles_df.sample(100 - len(smiles)).smiles.values.tolist()
+        smiles.extend(top_n)
+        print('load scaffold smiles')
+        return [Item(i,self.property_list) for i in smiles]
+        '''
+        with open('/home/v-nianran/src/data_goal5.json','r') as f:
+            data = json.load(f)
+        data_type = self.config.get('initial_pop')
+        print(f'loading {data_type} as initial pop!')
+        smiles = data[data_type]
+        return [Item(i,self.property_list) for i in smiles]
+        
         filepath = '/home/v-nianran/src/MOLLM/data/zinc250_5goals.pkl'
         with open(filepath, 'rb') as f:
             all_mols_zinc = pickle.load(f)
         print(f"init pop loaded from to {filepath}")
         # return all_mols_zinc['worst500'][-100:]
-        return all_mols_zinc['best500'][:100]'''
+        return all_mols_zinc['best500'][:100]
+    
+        
+            
 
         top_n = self.moles_df.sample(n - 1).smiles.values.tolist()
         top_n.append(mol1)
@@ -106,7 +126,7 @@ class MOO:
         return [Item(i,self.property_list) for i in top_n]
 
     def mutation(self, parent_list):
-        prompt = self.prompt_generator.get_mutation_prompt(parent_list,self.history_moles)
+        prompt = self.prompt_generator.get_prompt('mutation',parent_list,self.history_moles)
         #print(prompt,'\n\n')
         #assert False
         response = self.llm.chat(prompt)
@@ -114,11 +134,20 @@ class MOO:
         return [Item(smile,self.property_list) for smile in new_smiles],prompt,response
 
     def crossover(self, parent_list):
-        prompt = self.prompt_generator.get_crossover_prompt(parent_list,self.history_moles)
-        #print(prompt,'\n\n')
-        #assert False
+        #print('crossover!')
+        prompt = self.prompt_generator.get_prompt('crossover',parent_list,self.history_moles)
+        #print('prompt:',prompt)
+        response = self.llm.chat(prompt)
+        #print('response:',response,'\n\n\n')
+        new_smiles = extract_smiles_from_string(response)
+        return [Item(smile,self.property_list) for smile in new_smiles],prompt,response
+    
+    def explore(self, parent_list):
+        prompt = self.prompt_generator.get_prompt('explore',parent_list,self.all_mols)
         response = self.llm.chat(prompt)
         new_smiles = extract_smiles_from_string(response)
+        #print('response:',response)
+        #print('smiles',new_smiles)
         return [Item(smile,self.property_list) for smile in new_smiles],prompt,response
 
     def evaluate(self, smiles_list):
@@ -149,7 +178,7 @@ class MOO:
             return -value
         if op == 'reduction_potential':
             towards_value = float(requirement.split(',')[1])
-            return abs(value - towards_value)/5
+            return abs(value - towards_value)/5*2
         if op in ['donor','smarts_filter']: 
             is_true = judge(requirement,original_value,value)
             if is_true:
@@ -171,8 +200,7 @@ class MOO:
             elif 'decrease' in requirement:
                 return value
             else:
-                print('only support increase or decrease and range for minimizing')
-                raise NotImplementedError
+                raise NotImplementedError('only support increase or decrease and range for minimizing')
 
     def evaluate_all(self,items):
         smiles_list = [i.value for i in items]
@@ -202,7 +230,7 @@ class MOO:
         for i in self.all_mols:
             if i.value in all_zinc_mols:
                 already += 1 
-        self.results_dict.append(
+        self.results_dict['results'].append(
             {   'all_unique_moles': len(self.history_moles),
                 'llm_calls': self.llm_calls,
                 'Uniqueness':1-self.repeat_num/(self.llm_calls*2+1e-6),
@@ -214,32 +242,45 @@ class MOO:
                 'avg_sa':avg_sa,
                 'div':diversity_top100,
             })
-        json_path = os.path.join(self.config.get('save_dir'),'_'.join(self.property_list) + '_' + self.config.get('save_suffix') + f'_{self.seed}'+'.json')
+        
+        json_path = os.path.join(self.config.get('save_dir'),"results",'_'.join(self.property_list) + '_' + self.config.get('save_suffix') + f'_{self.seed}'+'.json')
+        if not os.path.exists(os.path.dirname(json_path)):
+            os.makedirs(os.path.dirname(json_path), exist_ok=True)
+            
+        self.results_dict['params'] = self.config.to_string()
+        self.results_dict['history_experience']  = self.history_experience
         with open(json_path,'w') as f:
             json.dump(self.results_dict, f, indent=4)
+        
         print(f'{len(self.history_moles)}/{self.budget} | '
-                f'Uniqueness:{1-self.repeat_num/(self.llm_calls*2+1e-6)} | '
-                f'Validity:{1-self.failed_num/(self.llm_calls*2+1e-6)} | '
-                f'Novelty:{1-already/(self.llm_calls*2+1e-6)} | '
+                f'Uniqueness:{1-self.repeat_num/(self.llm_calls*2+1e-6):.4f} | '
+                f'Validity:{1-self.failed_num/(self.llm_calls*2+1e-6):.4f} | '
+                f'Novelty:{1-already/(self.llm_calls*2+1e-6):.4f} | '
                 f'llm_calls: {self.llm_calls} | '
-                f'avg_top1: {top10[0].total:.3f} | '
-                f'avg_top10: {avg_top10:.3f} | '
-                f'avg_top100: {avg_top100:.3f} | '
-                f'avg_sa: {avg_sa:.3f} | '
-                f'div: {diversity_top100:.3f}')
+                f'avg_top1: {top10[0].total:.4f} | '
+                f'avg_top10: {avg_top10:.4f} | '
+                f'avg_top100: {avg_top100:.4f} | '
+                f'avg_sa: {avg_sa:.4f} | '
+                f'div: {diversity_top100:.4f}')
 
-    def generate_experience(self):
-        if np.random.random()>0.5:
-            self.prompt_generator.experience = None
-            print('no experience this generation')
-        else:
-            prompt,best_moles_prompt = self.prompt_generator.make_experience_prompt(self.all_mols)
-            response = self.llm.chat(prompt)
-            self.prompt_generator.experience= best_moles_prompt + "\n I have some experience of proposing such best molecules, you can take advantage of my best molecules and experience: \n" + response + "\n"
-            print('length exp:',len(self.prompt_generator.experience))
+    def update_experience(self):
+        prompt,best_moles_prompt,bad_moles_prompt = self.prompt_generator.make_experience_prompt(self.all_mols)
+        response = self.llm.chat(prompt)
+        
+        #self.prompt_generator.experience = (f"I already have some experience, take advantage of them :{response}"
+        #                                    )
+        self.prompt_generator.pure_experience = response
+        self.prompt_generator.experience = (f"I already have some experience and some good and bad moleculles, take advantage of them: the experience is: <experience> {response}" 
+                                            f"good example molecules are: {best_moles_prompt},\n"
+                                            f"and bad example molecules that you need to avoid molecules like them: {bad_moles_prompt}. </experience>\n"
+                                            f"You can take advantage of them and try to propose better molecules according to the objectives.\n"
+                                            )
+        self.history_experience.append(self.prompt_generator.experience) 
+        print('length exp:',len(self.prompt_generator.experience))
 
     def run(self, prompt,requirements):
         """High level logic"""
+        print('exper_name',self.config.get('exper_name'))
         set_seed(self.seed)
         start_time = time.time()
         self.requirement_meta = requirements
@@ -254,48 +295,75 @@ class MOO:
         self.evaluate_all(population)
         self.original_mol = population[-1] # this original_mol has property
         self.log()
-        self.prompt_generator = self.prompt_module(self.original_mol,self.requirement_meta,self.property_list)
+        self.prompt_generator = self.prompt_module(self.original_mol,self.requirement_meta,self.property_list,
+                                                   self.config.get('model.experience_prob'))
         init_pops = copy.deepcopy(population)
 
         #offspring_times = self.config.get('optimization.eval_budge') // ngen //2
         offspring_times = self.pop_size //2
+        self.num_gen = 0
         #for gen in tqdm(range(ngen)):
+        print('start!\n\n\n')
+        store_path = os.path.join(self.config.get('save_dir'),'mols','_'.join(self.property_list) + '_' + self.config.get('save_suffix') + f'_{self.seed}' +'.pkl')
+        if not os.path.exists(os.path.dirname(store_path)):
+            os.makedirs(os.path.dirname(store_path), exist_ok=True)
         while True:
+            #print('crossover prob', 0.2 + len(self.history_moles) / self.budget * 0.6)
             offspring = self.generate_offspring(population, offspring_times)
             population = self.select_next_population(population, offspring, self.pop_size)
             self.log()
-            #self.generate_experience()
+            if self.config.get('model.experience_prob')>0:
+                self.update_experience()
             if len(self.all_mols) >= self.budget:
                 break
+            self.num_gen+=1
+            
+            data = {
+                'history':self.history,
+                'init_pops':init_pops,
+                'final_pops':population,
+                'all_mols':self.all_mols,
+                'properties':self.property_list,
+                'evaluation': self.results_dict['results'],
+                'running_time':f'{(time.time()-start_time)/3600:.2f} hours'
+            }
+            with open(store_path, 'wb') as f:
+                pickle.dump(data, f)
+            print(f"Data saved to {store_path}")
+            for p in population:
+                if p.total>4.698:
+                    print('best appear',p.value,p.total)
         print(f'=======> total running time { (time.time()-start_time)/3600 :.2f} hours <=======')
-        store_path = os.path.join(self.config.get('save_dir'),'_'.join(self.property_list) + '_' + self.config.get('save_suffix') + f'_{self.seed}' +'.pkl')
-        data = {
-            'history':self.history,
-            'init_pops':init_pops,
-            'final_pops':population,
-            'all_mols':self.all_mols,
-            'properties':self.property_list,
-            'evaluation': self.results_dict,
-            'running_time':f'{(time.time()-start_time)/3600:.2f} hours'
-        }
-        with open(store_path, 'wb') as f:
-            pickle.dump(data, f)
-        print(f"Data saved to {store_path}")
+        
         return init_pops,population  # 计算效率
 
+    def mating(self,parent_list):
+        crossover_prob = self.config.get('model.crossover_prob')
+        mutation_prob = self.config.get('model.mutation_prob')
+        #crossover_prob = 0.2 + len(self.history_moles) / self.budget * 0.6
+        #mutation_prob = 1 - crossover_prob
+        explore_prob = self.config.get('model.explore_prob')
+        
+        
+        cycle_length = 10
+        #explore_prob = 0.25 + 0.7 * (np.cos(2 * np.pi * self.num_gen / cycle_length) + 1) / 2 
+        #crossover_prob = (1 - explore_prob) * (2/3)
+        #mutation_prob = 1 - explore_prob - crossover_prob
+        
+        #print('e pro, cross prob, mutate prob',explore_prob,crossover_prob,mutation_prob)
+        function = np.random.choice([self.crossover,self.mutation,self.explore],p=[crossover_prob,
+                                                                                   mutation_prob,
+                                                                                   explore_prob])
+        smiles,prompt,response = function(parent_list)
+        return smiles,prompt,response
+    
     def generate_offspring(self, population, offspring_times):
         #for _ in range(offspring_times): # 20 10 crossver+mutation 20 
         parents = [random.sample(population, 2) for i in range(offspring_times)]
         while True:
             try:
                 with concurrent.futures.ThreadPoolExecutor() as executor:
-                    futures = []
-                    for parent_list in parents:
-                        if np.random.random()<1.5:
-                            futures.append(executor.submit(self.crossover, parent_list=parent_list))
-                        else:
-                            futures.append(executor.submit(self.mutation, parent_list=parent_list))
-                    #futures = [executor.submit(self.crossover, parent_list=parent_list) for parent_list in parents]
+                    futures = [executor.submit(self.mating, parent_list=parent_list) for parent_list in parents]
                     results = [future.result() for future in futures]
                     children, prompts, responses = zip(*results) #[[item,item],[item,item]] # ['who are you value 1', 'who are you value 2'] # ['yes, 'no']
                     self.llm_calls += len(results)
@@ -342,11 +410,24 @@ class MOO:
     def select_next_population(self, population, offspring, pop_size):
         combined_population = offspring + population 
 
-        if len(self.property_list)>1:
+        #if len(self.property_list)>1:
+        if np.random.random()<0.5:
             return nsga2_selection(combined_population, pop_size)
         else:
             return so_selection(combined_population, pop_size)
     
     def no_selection(self,combined_population, pop_size):
         return combined_population[:pop_size] 
-c,p,r = None,None,None
+    
+    def hvc_selection(self,pops,pop_size):
+        scores = []
+        for pop in pops:
+            scores.append(pop.scores)
+        scores = np.stack(scores)
+        hv_pygmo = pg.hypervolume(scores)
+        hvc = hv_pygmo.contributions(np.array([1.0 for i in range(scores.shape[1])]))
+        sorted_indices = np.argsort(hvc)[::-1]  # Reverse to sort in descending order
+        bestn = [pops[i] for i in sorted_indices[:pop_size]]
+        return bestn
+    
+ 

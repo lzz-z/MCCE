@@ -17,7 +17,7 @@ class LLM:
 
     def _init_chatgpt(self):
         # Set the necessary variables
-        resource_name = "sfm-openai-sweden-central"#"gcrgpt4aoai2c"
+        resource_name = "sfm-openai-sweden-central"#"gcrgpt4aoai2c" sfm-openai-sweden-central  ds-chatgpt4o-ai-swedencentral
         endpoint = f"https://{resource_name}.openai.azure.com/"
         api_version = "2024-02-15-preview"  # Replace with the appropriate API version
 

@@ -71,7 +71,5 @@ def nsga2_selection(population, pop_size,return_fronts=False):
 
 def so_selection(population, pop_size):
     # Single objective
-
-    # Sort the items by their score (ascending order) based on the first (and only) element in the scores list
-    sorted_items = sorted(population, key=lambda item: item.scores[0])
-    return sorted_items[:pop_size]
+    sorted_items = sorted(population, key=lambda item: item.total, reverse=True)[:pop_size]
+    return sorted_items

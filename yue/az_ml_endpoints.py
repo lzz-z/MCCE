@@ -152,7 +152,7 @@ class AzureMLEndpoint:
 log_s_params = AzureMLEndpointParams(
     url="https://graphomer-solubility.westus3.inference.ml.azure.com/score",
     api_key=AZURE_LOG_S_ML_ENDPOINT_API_KEY,
-    deployment="crash2",
+    deployment="crash2-pipelinev1",
     query_type=ty.Dict[ty.Literal["smiles"], ty.List[str]],
     max_batch_size=32,
     retries=3,
@@ -163,7 +163,7 @@ log_s_params = AzureMLEndpointParams(
 reduction_potential_params = AzureMLEndpointParams(
     url="https://graphormer-reduction.southcentralus.inference.ml.azure.com/score",
     api_key=AZURE_RED_POT_ML_ENDPOINT_API_KEY,
-    deployment="emerald",
+    deployment="emerald-pipelinev2",
     query_type=ty.Dict[ty.Literal["smiles"], ty.List[str]],
     max_batch_size=32,
     retries=3,

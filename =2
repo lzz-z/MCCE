@@ -1,0 +1,4 @@
+Requirement already satisfied: pydantic in /home/v-nianran/miniconda3/envs/ai/lib/python3.10/site-packages (2.10.3)
+Requirement already satisfied: annotated-types>=0.6.0 in /home/v-nianran/miniconda3/envs/ai/lib/python3.10/site-packages (from pydantic) (0.7.0)
+Requirement already satisfied: pydantic-core==2.27.1 in /home/v-nianran/miniconda3/envs/ai/lib/python3.10/site-packages (from pydantic) (2.27.1)
+Requirement already satisfied: typing-extensions>=4.12.2 in /home/v-nianran/miniconda3/envs/ai/lib/python3.10/site-packages (from pydantic) (4.12.2)

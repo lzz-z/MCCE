@@ -1,6 +1,22 @@
+#exper_name: "abandon outdate experience, best f 0.5, pareto 0.25, hvc0.25, use molecules and experience, wo description, describe total value, add a sentence avoid"
+#exper_name: "0.5 exp, add a sentence in crossover, experience with best_f 0.5, pareto 0.5, with description, and other description in above,cycle_length = 10
+#         experience use random best 10 from best 100
+#         remove good molecules history in explore prompt
+#         0.5 pareto selection and 0.5 hvc selection"
+exper_name: "best_f selection 0.5 + 0.5 pareto selection, 0.05,0.8,0.2,0  for exp, cross, mutate and explore, with experience"
+save_dir: "/home/v-nianran/src/results/official"
+save_suffix: "worst00_123000_bestf_pareto_select0.05_0820"
+initial_pop: "worst100" # best100, worst100, random1 ~ 5
+
+material: False
 model:
   name: chatgpt
   prompt_module: Prompt
+  experience_prob: 0.05
+  crossover_prob: 0.8
+  mutation_prob: 0.2 #0.25
+  explore_prob: 0. #0.25
+
 
 goals: [sa,drd2,qed,gsk3b,jnk3]
 
@@ -14,5 +30,5 @@ dataset:
 
 init_datset: ZINC
 
-save_dir: "/home/v-nianran/src/results"
-save_suffix: "random100_pop50"
+
+

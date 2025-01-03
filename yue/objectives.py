@@ -173,7 +173,6 @@ def log_s_to_properties_db(smiles: str, log_s: float):
         method="ml",
         origin="logS_endpoint",
     )
-
     if properties_doc := PropertiesDoc.find_one(PropertiesDoc.smiles == smiles).run():  # type: ignore
         if properties_doc.properties.get("log_s"):
             properties_doc.update({"$push": {"log_s": property_model}})

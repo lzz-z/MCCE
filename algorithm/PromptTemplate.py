@@ -2,48 +2,75 @@ from model.util import nsga2_selection
 import pygmo as pg
 import numpy as np
 class Prompt:
-    def __init__(self,original_mol,requirements,properties):
+    def __init__(self,original_mol,requirements,properties,experience_prob=0.5):
         self.requirements = requirements
         self.property = properties
         self.original_mol = original_mol
         self.experience = None
+        self.pure_experience = None
+        self.exp_times = 0
+        self.experience_prob = experience_prob
 
     def get_first_prompt(self):
         pass
 
     def get_final_prompt(self):
         pass 
+    # 
+    def get_prompt(self,prompt_type,ind_list,history_moles):
+        if prompt_type=='crossover':
+            prompt = self.get_crossover_prompt(ind_list,history_moles)
+        elif prompt_type == 'mutation':
+            prompt = self.get_mutation_prompt(ind_list,history_moles)
+        elif prompt_type == 'explore':
+            prompt = self.get_exploration_prompt(ind_list,history_moles)
+        else:
+            raise NotImplementedError('not implemented type of operation:',prompt_type)
+        if np.random.random() < self.experience_prob and self.experience is not None:
+            prompt += self.experience
+            #print('###################################')
+            #print('prompt with experience:\n',prompt)
+        
+            #print('no experience added this time')
+        
+        return prompt
+            
     
     def get_mutation_prompt(self,ind_list,history_moles):
         requirement_prompt = self.make_requirement_prompt(self.original_mol,self.requirements,self.property)
         
         history_prompt = self.make_history_prompt(ind_list[:1])
-        instruction_prompt = self.make_instruction_prompt(mutation=True)
+        instruction_prompt = self.make_instruction_prompt(oper_type='mutation')
         description_prompt = self.make_description_prompt()
         final_prompt =requirement_prompt + description_prompt +  history_prompt +  instruction_prompt 
         return final_prompt
+    
+    def get_exploration_prompt(self,ind_list,history_moles):
+        top100 = sorted(history_moles, key=lambda item: item.total, reverse=True)[:100]
+        worst10 = sorted(history_moles, key=lambda item: item.total, reverse=True)[-(self.exp_times+1)*10:-(self.exp_times)*10]
+        requirement_prompt = self.make_requirement_prompt(self.original_mol,self.requirements,self.property)
+        random10 = np.random.choice(top100,size=10,replace=False)
+        history_prompt = self.make_history_prompt(random10)
+        bad_history_prompt = self.make_history_prompt(worst10,experience=False)
+        description_prompt = self.make_description_prompt()
+        instruction_prompt = self.make_instruction_prompt(oper_type='explore')
+        #final_prompt = requirement_prompt + description_prompt +  history_prompt +  instruction_prompt 
+        final_prompt = requirement_prompt + description_prompt + instruction_prompt 
+        final_prompt = final_prompt + "There are also some bad molecules, don't propose molecules like the molecules below: \n"
+        final_prompt = final_prompt + bad_history_prompt
+        
+        return final_prompt
+
 
     def get_crossover_prompt(self,ind_list,history_moles):
         requirement_prompt = self.make_requirement_prompt(self.original_mol,self.requirements,self.property)
         
         history_prompt = self.make_history_prompt(ind_list)
-        instruction_prompt = self.make_instruction_prompt()
+        instruction_prompt = self.make_instruction_prompt(oper_type='crossover')
         description_prompt = self.make_description_prompt()
-        mole_history_prompt = self.make_mole_history_prompt(history_moles)
-        if self.experience is not None:
-            final_prompt =requirement_prompt + description_prompt +  history_prompt + self.experience + instruction_prompt
-        else:
-            final_prompt =requirement_prompt + description_prompt +  history_prompt +  instruction_prompt
+        final_prompt = requirement_prompt + description_prompt + history_prompt +  instruction_prompt
         #final_prompt =requirement_prompt  +  history_prompt +  instruction_prompt 
         return final_prompt
-
-    def make_mole_history_prompt(self,moles):
-        if len(moles) == 0 :
-            return ""
-        sentence = "Make sure you don't propose the following molecules: \n"
-        for mole in moles:
-            sentence += f"<mol>{mole}</mol>  "
-        return sentence + '\n'
 
     def make_description_prompt(self):
         prompt = ""
@@ -55,7 +82,7 @@ class Prompt:
         if experience:
             pop_content = ""
         else:
-            pop_content = "I have some molecules with their objective values. \n"
+            pop_content = "I have some molecules with their objective values. The total score is the integrate of all property values, a higher total score means better molecule. \n"
         for ind in ind_list:
             pop_content += f"<mol>{ind.value}</mol>, its property values are: "
             for index,property in enumerate(ind.property_list):
@@ -63,55 +90,98 @@ class Prompt:
             pop_content += f'total: {ind.total:.4f}\n'
         return pop_content
     
-    def make_instruction_prompt(self,mutation=False): # improvement score = point hypervolume
-        if mutation:
-            prompt = ("Give me 2 new/novel better molecules that are different from all points above, and not dominated by any of the above. \n"
-            "You can do it by applying mutation on the given points and based on your knowledge. The molecule should be valid. \n"
-            "Do not write code. Do not give any explanation. Each output new molecule must start with <mol> and end with </mol> in SIMLE form"
+    def make_instruction_prompt(self,oper_type='crossover'): # improvement score = point hypervolume 
+        # oper_type : ['crossover', 'mutation', 'explore']
+        if oper_type=='mutation':
+            prompt = ("Generate 2 new better molecules in SMILES format through mutation, ensuring they are different from all points provided "
+                      "above and are not dominated by any of the above.  \n"
+            "The molecules must be valid. There are some example operations: \n"
+            "1. Modify functional groups selectively while preserving the overall structure. \n"
+            "2. Replace atoms or bonds (e.g., replace a hydrogen with a halogen or adjust bond orders) to improve specific properties. \n"
+            "3. Add or remove small substituents (e.g., methyl, hydroxyl groups) to explore variations. \n"
+            "4. Introduce ring modifications (e.g., add, remove, or modify aromatic or aliphatic rings) to affect stability or reactivity. \n"
+            "5. Alter stereochemistry or isomer configurations to explore stereoisomer advantages. \n"
+            "6. Consider property-specific optimizations (e.g., hydrophobicity, solubility, binding affinity) to maintain balance. \n"
+            "Do not write code. Do not give any explanation. Each output new molecule must start with <mol> and end with </mol> in SIMLES form"
             )
-        else:
+        elif oper_type=='crossover':
             prompt = ("Give me 2 new better molecules that are different from all points above, and not dominated by any of the above. \n"
             "You can do it by applying crossover on the given points and based on your knowledge. The molecule should be valid. \n"
-            "Do not write code. Do not give any explanation. Each output new molecule must start with <mol> and end with </mol> in SIMLE form"
+            "Do not write code. Do not give any explanation. Each output new molecule must start with <mol> and end with </mol> in SIMLES form"
             )
+        elif oper_type=='explore':
+            prompt = ("Confidently propose two novel and better molecules different from the given ones, leveraging your expertise, "
+                     #"try not be dominated by any of the above. \n"
+                     "The molecule should be valid. \n"
+                     "Do not write code. Do not give any explanation. Each output new molecule must start with <mol> and end with </mol> in SIMLES form"
+                     )
+        else:
+            raise NotImplementedError(f'unsupported instruction type: {oper_type}')
         return prompt
     
     def make_experience_prompt(self,all_mols):
-        best10 = sorted(all_mols, key=lambda item: item.total, reverse=True)[:10]
-        worst10 = sorted(all_mols, key=lambda item: item.total, reverse=True)[-10:]
-        best10, fronts = nsga2_selection(all_mols,pop_size=10,return_fronts=True)
-        '''best100,fronts = nsga2_selection(all_mols,pop_size=100,return_fronts=True)
-        if len(fronts[0])<=10:
-            best10 = [all_mols[i] for i in fronts[0]]
-        else:
-            tmpidx = fronts[0]
-            points = []
-            scores = []
-            for idx in tmpidx:
-                scores.append(all_mols[idx].scores)
-                points.append(all_mols[idx])
-            scores = np.stack(scores)
-            hv_pygmo = pg.hypervolume(scores)
-            hvc = hv_pygmo.contributions(np.array([1.0 for i in range(scores.shape[1])]))
+        experience_type = np.random.choice(['best_f','hvc','pareto'],p=[0.5,0,0.5])
+        print('expereince_type',experience_type,'wrost index',-(self.exp_times+1)*10,-(self.exp_times)*10)
+        worst10 = sorted(all_mols, key=lambda item: item.total, reverse=True)[-(self.exp_times+1)*10:-(self.exp_times)*10]
+        if experience_type == 'best_f':
+            best100 = sorted(all_mols, key=lambda item: item.total, reverse=True)[:100]
+            best10 = np.random.choice(best100,size=10,replace=False)
+        elif experience_type == 'hvc':
+            best100,fronts = nsga2_selection(all_mols,pop_size=100,return_fronts=True)
+            if len(fronts[0])<=10:
+                best10 = [all_mols[i] for i in fronts[0]]
+            else:
+                tmpidx = fronts[0]
+                points = []
+                scores = []
+                for idx in tmpidx:
+                    scores.append(all_mols[idx].scores)
+                    points.append(all_mols[idx])
+                scores = np.stack(scores)
+                hv_pygmo = pg.hypervolume(scores)
+                hvc = hv_pygmo.contributions(np.array([1.0 for i in range(scores.shape[1])]))
 
-            sorted_indices = np.argsort(hvc)[::-1]  # Reverse to sort in descending order
-            best10 = [points[i] for i in sorted_indices[:10]]'''
+                sorted_indices = np.argsort(hvc)[::-1]  # Reverse to sort in descending order
+                best10 = [points[i] for i in sorted_indices[:10]]
+        elif experience_type == 'pareto':
+            best100, fronts = nsga2_selection(all_mols,pop_size=100,return_fronts=True)
+            best10 = np.random.choice(best100,size=10,replace=False)
+        else:
+            raise NotImplementedError("Not implemented experience type:", experience_type)
 
         requirement_prompt = self.make_requirement_prompt(self.original_mol,self.requirements,self.property)
         history_prompt = self.make_history_prompt(best10,experience=True)
         bad_history_prompt = self.make_history_prompt(worst10,experience=True)
-        prompt = "I am optimizing molecular properties, the requirements are in the following: \n" + requirement_prompt + "\n"
-        prompt = prompt + "I have already obtained some excellent non-dominated molecules with its property values:" + history_prompt + "\n"
-        prompt = prompt + "I also have some worst molecules with its property values:" + history_prompt + "\n"
-        prompt = prompt + "now summarize the experience of the excellence of these molecules and how can we create novel molecules that are excellent like these."
-        prompt = prompt + "And also summarize the why molecules have bad propeties and how to avoid them."
-        prompt = prompt + "Keep the experience in 400 words, don't be too long and repetitive."
-        return prompt,history_prompt
+        prompt = (
+            f"I am optimizing molecular properties based on the following requirements:\n{requirement_prompt}\n\n"
+            f"Here are some excellent non-dominated molecules and their associated property values:\n{history_prompt}\n\n"
+            f"Here are some poorly performing molecules and their associated property values:\n{bad_history_prompt}\n\n"
+            "Please analyze the patterns and characteristics of the excellent molecules. Summarize what makes them excel and suggest strategies to create new molecules with similar and better properties. "
+            "Additionally, identify the reasons why the poorly performing molecules have suboptimal properties and provide guidance on how to avoid such issues in the future. "
+        )
+        
+        if self.experience is not None:
+            prompt += (
+                f"When you write the experience, also integrate the important information from my old experience. \n"
+                f"My old experience is: <old experience>{self.pure_experience} </old experience>\n"
+                "In your reply, only write the concise integrated experience without repetitive sentences or "
+                "conclusions to include as much useful experience as possible.\n"
+                f"You can also abandon less useful or inappropriate experience in my old experience. "   
+            )
+            #print('-------------------')
+            #print('combine experience query prompt:\n',prompt)
+            #assert False
+        prompt += ("Keep the summary concise (within 200 words), focusing on actionable insights and avoiding redundancy."
+                   "Don't describe the given molecules, directly state the experience")
+
+        self.exp_times += 1
+        return prompt,history_prompt,bad_history_prompt
 
 
     def make_requirement_prompt(self,original_mol,requirements,properties):
         sentences = []
         number = 1
+        
         for property in properties:
             if property == 'similarity':
                 sentence = f"make sure the new molecules you propose has a similarity of over 0.4 to our original molecule <mol>{original_mol.value}</mol>"
@@ -162,11 +232,13 @@ class Prompt:
                     sentence = f"modify the {property_name} value."
             sentences.append(f'{number}. '+sentence)
             number += 1
-        init_sentence = f'Based on molecule <mol>{original_mol.value}</mol>, its property values are: '
-        for k,v in original_mol.property.items():
-            init_sentence += f'{k}:{v:.4f}, '
+        #init_sentence = f'Based on molecule <mol>{original_mol.value}</mol>, its property values are: '
+        #for k,v in original_mol.property.items():
+        #    init_sentence += f'{k}:{v:.4f}, '
         #sentences = init_sentence + f'suggest new molecules that satisfy the following requirements: \n' + '\n'.join(sentences) +'\n'
         sentences = f'suggest new molecules that satisfy the following requirements: \n' + '\n'.join(sentences) +'\n'
+        if 'reduction_potential' in properties:
+            sentences += 'reduction_potential is the most important objective, make sure it is as close to -1.3 as possible.'
         return sentences
 
 descriptions = {

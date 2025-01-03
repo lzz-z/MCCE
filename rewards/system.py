@@ -25,6 +25,8 @@ class RewardingSystem:
                     'Osimertinib_MPO','Fexofenadine_MPO','Ranolazine_MPO',
                     'Perindopril_MPO','Amlodipine_MPO','Sitagliptin_MPO',
                     'Zaleplon_MPO','Valsartan_SMARTS','Scaffold Hop',]
+        
+        
         tdc_evaluator = ['Diversity','Uniqueness','Validity','Novelty']
         self.all_rewards = {
             name.lower():Oracle(name=name) for name in tdc_func

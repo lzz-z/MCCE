@@ -45,7 +45,7 @@ reduction_potential -4.990693092346191 -0.9798483848571777    to -1.3
 smarts_filter 0.0 1.0    # 0 pass
 logs -7.43935489654541 0.47240304946899414 # max
 '''
-
+'''
 import pandas as pd
 from algorithm.MOO import MOO
 from algorithm.base import Item
@@ -101,6 +101,7 @@ def save_to_pkl( filepath):
         pickle.dump(data, f)
     print(f"Data saved to {filepath}")
 save_to_pkl(filepath)
+'''
 '''
 import pandas as pd
 from algorithm.MOO import MOO
@@ -208,3 +209,35 @@ if __name__ == '__main__':
     llm = LLM()
     print(llm.chat('who are you?'))
 '''
+
+from algorithm.PromptTemplate import Prompt
+import pickle
+with open('/home/v-nianran/src/results/sa_drd2_qed_gsk3b_jnk3_best100_mutation_0.5_experience_bestworst_46.pkl','rb') as f:
+    obj = pickle.load(f)
+pops = obj['final_pops']
+properties = ['sa','drd2','qed','gsk3b','jnk3']
+requirement = {
+            "qed_requ": {
+                "property": "QED",
+                "requirement": "increase"
+            },
+            "drd2_requ": {
+                "property": "DRD2",
+                "requirement": "decrease"
+            },
+            "sa_requ": {
+                "property": "SA",
+                "requirement": "decrease"
+            },
+            "gsk3b_requ": {
+                "property": "GSK3\u03b2",
+                "requirement": "decrease"
+            },
+            "jnk3_requ": {
+                "property": "JNK3",
+                "requirement": "increase"
+            }
+        }
+original_mol = pops[0]
+pg = Prompt(original_mol,requirement,properties)
+print(pg.get_exploration_prompt(pops))

@@ -1,3 +1,4 @@
+import numpy as np
 class Item:
     #property_list = ['qed', 'logp', 'donor']
 
@@ -21,8 +22,14 @@ class Item:
                 self.total += self.property[p]
             elif p == 'sa':
                 self.total += 1- (self.property[p] -1 ) /9
-            elif p in ['gsk3b','drd2']:
+            elif p in ['gsk3b','drd2','smarts_filter']:
                 self.total += 1-self.property[p]
+            elif p in ['logs']:
+                self.total += (self.property[p] + 8 ) / (9)
+            elif p in ['reduction_potential']:
+                self.total += 1-  abs( np.clip(self.property[p],-2.3,-0.3) +1.3)
+            else:
+                raise NotImplementedError("{p} property is not defined in base.py")
                 
 import pickle
 import os

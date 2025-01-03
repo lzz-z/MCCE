@@ -30,6 +30,7 @@ def _get_cosmos_db_connection_string_from_azure_identity(
     if mode not in ("r", "rw"):
         raise ValueError(f"Illegal mode {mode}.")
     client = CosmosDBManagementClient(get_azure_creds(), subscription_id)
+    print('resource group:',resource_group,'account_name:',account_name)
     cs_result = client.database_accounts.list_connection_strings(resource_group, account_name)
     cs_idx = {"r": 2, "rw": 0}[mode]
     return cs_result.connection_strings[cs_idx].connection_string

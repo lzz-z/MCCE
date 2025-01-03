@@ -25,13 +25,26 @@ class ConfigLoader:
         if value == {}:
             return default
         return value
+    
+    def to_string(self, config=None, indent=0):
+        """Recursively format the configuration dictionary as a string."""
+        if config is None:
+            config = self.config
+        lines = []
+        for key, value in config.items():
+            if isinstance(value, dict):
+                lines.append(" " * indent + f"{key}:")
+                lines.append(self.to_string(value, indent + 2))
+            else:
+                lines.append(" " * indent + f"{key}: {value}")
+        return "\n".join(lines)
 
 class MOLLM:
     def __init__(self, config='base.yaml',resume=False,eval=False,seed=42):
         self.config = ConfigLoader(config)
         self.property_list = self.config.get('goals')
         if not eval:
-            self.reward_system = RewardingSystem()
+            self.reward_system = RewardingSystem(material=self.config.get('material'))
         self.llm = LLM()
         self.seed = seed
         self.history = []

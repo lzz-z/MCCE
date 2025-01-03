@@ -8,8 +8,7 @@ def extract_symbol_and_number(requirement_str):
         number = float(match.group(2))  # Extracts the number (as a float, e.g., 2, -3, 3.14, etc.)
         return symbol, number
     else:
-        print('The format of requirement is wrong:', requirement_str)
-        raise NotImplementedError
+        raise NotImplementedError('The format of requirement is wrong:', requirement_str)
 
 def judge(requirement,input_mol_value,output_mol_value):
     metas = requirement.split(',')
@@ -31,7 +30,7 @@ def judge(requirement,input_mol_value,output_mol_value):
         elif direction == 'decrease':
             diff = input_mol_value - output_mol_value
         else:
-            raise NotImplementedError
+            raise NotImplementedError('Not implemented requirement:',requirement)
         if symbol == '>=':
             return diff >= float(number)
         elif symbol == '>':
@@ -43,7 +42,7 @@ def judge(requirement,input_mol_value,output_mol_value):
         elif symbol == '==':
             return diff == float(number)
         else:
-            raise NotImplementedError
+            raise NotImplementedError('Not implemented symbol:',symbol)
     elif len(metas) == 3:
         assert metas[0] == 'range' # only support range currently, e.g. 'range, 7, 8'
         a, b = [float(x) for x in requirement.split(',')[1:]]

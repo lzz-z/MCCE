@@ -227,16 +227,16 @@ class MOO:
         top100_bbbp = np.mean([i.property['bbbp'] for i in top100])
         
         already = 0
-        all_zinc_mols = self.moles_df.smiles.values
-        for i in self.all_mols:
-            if i.value in all_zinc_mols:
-                already += 1 
+        #all_zinc_mols = self.moles_df.smiles.values
+        #for i in self.all_mols:
+        #    if i.value in all_zinc_mols:
+        #        already += 1 
         self.results_dict['results'].append(
             {   'all_unique_moles': len(self.history_moles),
                 'llm_calls': self.llm_calls,
                 'Uniqueness':1-self.repeat_num/(self.llm_calls*2+1e-6),
                 'Validity':1-self.failed_num/(self.llm_calls*2+1e-6),
-                'Novelty':1-already/(self.llm_calls*2+1e-6),
+                #'Novelty':1-already/(self.llm_calls*2+1e-6),
                 'avg_top1':top10[0].total,
                 'avg_top10':avg_top10,
                 'avg_top100':avg_top100,
@@ -258,7 +258,7 @@ class MOO:
         print(f'{len(self.history_moles)}/{self.budget} | '
                 f'Uniqueness:{1-self.repeat_num/(self.llm_calls*2+1e-6):.4f} | '
                 f'Validity:{1-self.failed_num/(self.llm_calls*2+1e-6):.4f} | '
-                f'Novelty:{1-already/(self.llm_calls*2+1e-6):.4f} | '
+                #f'Novelty:{1-already/(self.llm_calls*2+1e-6):.4f} | '
                 f'llm_calls: {self.llm_calls} | '
                 f'avg_top1: {top10[0].total:.4f} | '
                 f'avg_top10: {avg_top10:.4f} | '
@@ -334,9 +334,6 @@ class MOO:
             with open(store_path, 'wb') as f:
                 pickle.dump(data, f)
             print(f"Data saved to {store_path}")
-            for p in population:
-                if p.total>4.698:
-                    print('best appear',p.value,p.total)
         print(f'=======> total running time { (time.time()-start_time)/3600 :.2f} hours <=======')
         
         return init_pops,population  # 计算效率

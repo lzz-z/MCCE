@@ -58,6 +58,7 @@ def rm_map_number(smiles):
 
 def canonicalize(smiles):
     try:
+        smiles_to_selfies(smiles)
         smiles = rm_map_number(smiles)
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
@@ -254,9 +255,8 @@ def load_bbbp_model():
     return tokenizer,model
 
 def get_bbbp(input_smiles_all, tokenizer, model):
-    
     results = get_all_prediction(input_smiles_all, 'bbbp', tokenizer, model, batch_size=1280, args=None)['predictions']
-    results = [1. if i=='Yes.' else 0 for i in results]
+    results = [1. if i=='Yes.' else 0. for i in results]
     return results
 
 if __name__ == '__main__':

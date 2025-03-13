@@ -51,7 +51,7 @@ class LLM:
             stream=False
         )
 
-        print(response.choices[0].message.content)
+        return response.choices[0].message.content
     
     def _init_gemini(self):
         genai.configure(api_key="AIzaSyCnqH8ekkJkr0Z_t6qeDAgRtWs6Gy4AuBk")

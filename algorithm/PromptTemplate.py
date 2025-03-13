@@ -89,7 +89,7 @@ class Prompt:
     def make_instruction_prompt(self,oper_type='crossover'): # improvement score = point hypervolume 
         # oper_type : ['crossover', 'mutation', 'explore']
         if oper_type=='mutation':
-            prompt = ("Generate 3 new better molecules in SMILES format through mutation, ensuring they are different from all points provided "
+            prompt = ("Generate 2 new better molecules in SMILES format through mutation, ensuring they are different from all points provided "
                       "above and are not dominated by any of the above.  \n"
             "The molecules must be valid. There are some example operations: \n"
             "1. Modify functional groups selectively while preserving the overall structure. \n"
@@ -101,7 +101,7 @@ class Prompt:
             "Do not write code. Do not give any explanation. Each output new molecule must start with <mol> and end with </mol> in SIMLES form"
             )
         elif oper_type=='crossover':
-            prompt = ("Give me 3 new better molecules that are different from all points above, and not dominated by any of the above. \n"
+            prompt = ("Give me 2 new better molecules that are different from all points above, and not dominated by any of the above. \n"
             "You can do it by applying crossover on the given points and based on your knowledge. The molecule should be valid. \n"
             "Do not write code. Do not give any explanation. Each output new molecule must start with <mol> and end with </mol> in SIMLES form"
             )

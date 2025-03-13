@@ -340,7 +340,7 @@ class MOO:
         init_pops = copy.deepcopy(population)
 
         #offspring_times = self.config.get('optimization.eval_budge') // ngen //2
-        offspring_times = self.pop_size //3
+        offspring_times = self.pop_size //2
         self.num_gen = 0
         #for gen in tqdm(range(ngen)):
         store_path = os.path.join(self.config.get('save_dir'),'mols','_'.join(self.property_list) + '_' + self.config.get('save_suffix') + f'_{self.seed}' +'.pkl')

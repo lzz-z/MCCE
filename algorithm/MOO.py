@@ -412,7 +412,7 @@ class MOO:
                 'history':self.history,
                 'init_pops':init_pops,
                 'final_pops':population,
-                'all_mols':self.all_mols,
+                'all_mols':self.mol_buffer,
                 'properties':self.property_list,
                 'evaluation': self.results_dict['results'],
                 'running_time':f'{(time.time()-start_time)/3600:.2f} hours'

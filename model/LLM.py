@@ -1,4 +1,5 @@
 import os
+import requests
 from openai import AzureOpenAI,OpenAI
 #from azure.identity import AzureCliCredential, ChainedTokenCredential, DefaultAzureCredential, get_bearer_token_provider
 def AzureCliCredential():
@@ -12,10 +13,39 @@ def get_bearer_token_provider():
 import google.generativeai as genai
 class LLM:
     def __init__(self,model='chatgpt'):
+        
         print(f'using model: {model}')
         self.model_choice = model
-        self.model = self._init_model(model)
-        self.chat = self._init_chat(model)
+        if ',' in model:
+            self.model_choice = model.split(',')[1]
+            self.chat = self.proxy_chat
+        else:
+            self.model = self._init_model(model)
+            self.chat = self._init_chat(model)
+        print('model choice:',self.model_choice)
+
+    def proxy_chat(self,content):
+        base_url = "http://35.220.164.252:3888/v1/chat/completions"
+        api_key = "sk-StsrRcnWhb5Oajwh9hpvWDW0L9d9e2BgpnaAP4ocFmI9txBB"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"  
+        }
+        
+        data = {
+            "model": self.model_choice, # 可以替换为需要的模型
+            "messages": [
+                {"role": "user", "content": content}
+            ],
+            #"temperature": 0.7 # 自行修改温度等参数
+        }
+        response = requests.post(base_url, headers=headers, json=data)
+
+        if response.status_code != 200:
+            print(f"Request failed with status code {response.status_code}")
+            print("Response:", response.text)
+
+        return response.json()['choices'][0]['message']['content']
 
     def _init_chat(self,model):
         if model == 'chatgpt':

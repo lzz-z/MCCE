@@ -21,6 +21,8 @@ from algorithm import PromptTemplate
 from eval import judge
 import pygmo as pg
 import pickle
+
+from pymoo.indicators.hv import HV
 def set_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
@@ -43,6 +45,25 @@ def split_list(lst, n):
     k, m = divmod(len(lst), n)
     return [lst[i*k + min(i, m):(i+1)*k + min(i+1, m)] for i in range(n)]
 
+def top_auc(buffer, top_n, finish, freq_log, max_oracle_calls):
+    sum = 0
+    prev = 0
+    called = 0
+    ordered_results = list(sorted(buffer, key=lambda kv: kv[1], reverse=False))
+    for idx in range(freq_log, min(len(buffer), max_oracle_calls), freq_log):
+        temp_result = ordered_results[:idx]
+        temp_result = list(sorted(temp_result, key=lambda kv: kv[0].total, reverse=True))[:top_n]
+        top_n_now = np.mean([item[0].total for item in temp_result])
+        sum += freq_log * (top_n_now + prev) / 2
+        prev = top_n_now
+        called = idx
+    temp_result = list(sorted(ordered_results, key=lambda kv: kv[0].total, reverse=True))[:top_n]
+    top_n_now = np.mean([item[0].total for item in temp_result])
+    sum += (len(buffer) - called) * (top_n_now + prev) / 2
+    if finish and len(buffer) < max_oracle_calls:
+        sum += (max_oracle_calls - len(buffer)) * top_n_now
+    return sum / max_oracle_calls
+
 class MOO:
     def __init__(self, reward_system, llm,property_list,config,seed):
         self.reward_system = reward_system
@@ -56,10 +77,9 @@ class MOO:
         self.budget = self.config.get('optimization.eval_budget')
         self.init_mol_dataset()
         self.prompt_module = getattr(PromptTemplate ,self.config.get('model.prompt_module',default='Prompt'))
-        self.successful_moles = []
-        self.failed_moles = []
         self.history_moles = []
         self.all_mols = []
+        self.mol_buffer = [] # same as all_mols but with orders for computing auc
         self.results_dict = {'results':[]}
         self.history_experience = []
         self.repeat_num = 0
@@ -90,7 +110,7 @@ class MOO:
         print('load scaffold smiles')
         return [Item(i,self.property_list) for i in smiles]
         '''
-        with open('/home/hp/MOLLM/data/data_goal5.json','r') as f:
+        with open('/home/hp/src/MOLLM/data/data_goal5.json','r') as f:
             data = json.load(f)
         data_type = self.config.get('initial_pop')
         print(f'loading {data_type} as initial pop!')
@@ -196,7 +216,7 @@ class MOO:
             if op in ['logp','logs','sa']:
                 value = value/10
             if 'increase' in requirement:
-                return -value
+                return 1-value
             elif 'decrease' in requirement:
                 return value
             else:
@@ -215,16 +235,27 @@ class MOO:
         for i in pops:
             if i.value not in self.history_moles:
                 self.history_moles.append(i.value)
+            self.mol_buffer.append([i, len(self.mol_buffer)+1])
             self.all_mols.append(i)
 
     def log(self):
+        auc1 = top_auc(self.mol_buffer, 1, finish=False, freq_log=100, max_oracle_calls=self.budget)
+        auc10 = top_auc(self.mol_buffer, 10, finish=False, freq_log=100, max_oracle_calls=self.budget)
+        auc100 = top_auc(self.mol_buffer, 100, finish=False, freq_log=100, max_oracle_calls=self.budget)
+
+
         top100 = sorted(self.all_mols, key=lambda item: item.total, reverse=True)[:100]
         top10 = top100[:10]
         avg_top10 = np.mean([i.total for i in top10])
         avg_top100 = np.mean([i.total for i in top100])
         avg_sa = np.mean([i.property['sa'] for i in top100])
         diversity_top100 = self.reward_system.all_evaluators['diversity']([i.value for i in top100])
-            
+
+        scores = np.array([i.scores for i in top100])
+        ref_point = np.array([1.0]*len(self.property_list))
+        hv = HV(ref_point=ref_point)
+        volume = hv(scores)
+
         new_score = avg_top100
         # import ipdb; ipdb.set_trace()
         if (new_score - self.old_score) < 1e-3:
@@ -255,6 +286,10 @@ class MOO:
                     'avg_top1':top10[0].total,
                     'avg_top10':avg_top10,
                     'avg_top100':avg_top100,
+                    'top1_auc':auc1,
+                    'top10_auc':auc10,
+                    'top100_auc':auc100,
+                    'hypervolume':volume,
                     'bbbp_top1':top1_bbbp,
                     'bbbp_top10':top10_bbbp,
                     'bbbp_top100':top100_bbbp,
@@ -272,6 +307,10 @@ class MOO:
                 f'avg_top1 bbbp: {top1_bbbp:.4f} | '
                 f'avg_top10 bbbp: {top10_bbbp:.4f} | '
                 f'avg_top100 bbbp: {top100_bbbp:.4f} | '
+                f'top1_auc : {auc1:.4f} | '
+                f'top10_auc : {auc10:.4f} | '
+                f'top100_auc : {auc100:.4f} | '
+                f'hv: {volume:.4f} | '
                 f'div: {diversity_top100:.4f}')
         else:
             self.results_dict['results'].append(
@@ -283,9 +322,14 @@ class MOO:
                     'avg_top1':top10[0].total,
                     'avg_top10':avg_top10,
                     'avg_top100':avg_top100,
+                    'top1_auc':auc1,
+                    'top10_auc':auc10,
+                    'top100_auc':auc100,
+                    'hypervolume':volume,
                     'div':diversity_top100,
                     'generated_num':self.generated_num})
             print(f'{len(self.history_moles)}/{self.budget}/all generated: {self.generated_num} | '
+                  f'len mol_buffer{len(self.mol_buffer)} | '
                 f'Uniqueness:{1-self.repeat_num/(self.generated_num+1e-6):.4f} | '
                 f'Validity:{1-self.failed_num/(self.generated_num+1e-6):.4f} | '
                 #f'Novelty:{1-already/(self.generated_num+1e-6):.4f} | '
@@ -293,6 +337,10 @@ class MOO:
                 f'avg_top1: {top10[0].total:.4f} | '
                 f'avg_top10: {avg_top10:.4f} | '
                 f'avg_top100: {avg_top100:.4f} | '
+                f'top1_auc : {auc1:.4f} | '
+                f'top10_auc : {auc10:.4f} | '
+                f'top100_auc : {auc100:.4f} | '
+                f'hv: {volume:.4f} | '
                 f'div: {diversity_top100:.4f}')
         
         json_path = os.path.join(self.config.get('save_dir'),"results",'_'.join(self.property_list) + '_' + self.config.get('save_suffix') + f'_{self.seed}'+'.json')

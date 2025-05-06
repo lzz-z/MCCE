@@ -53,6 +53,10 @@ class MOLLM:
         self.final_pops = []
         self.start_index = 0
         self.save_dir = self.config.get('save_dir')
+        model_name = self.config.get('model.name')
+        if ',' in model_name:
+            model_name = model_name.split(',')[1]
+        self.save_dir = os.path.join(self.save_dir,model_name)
         self.save_suffix = self.config.get('save_suffix')
         self.resume = resume
         self.save_path = os.path.join(self.save_dir,'_'.join(self.property_list) + '_' + self.save_suffix +'.pkl')

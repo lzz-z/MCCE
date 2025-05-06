@@ -1,11 +1,11 @@
 exper_name: "best_f selection 0.5 + 0.5 pareto selection, 0.0,0.8,0.2,0  for exp, cross, mutate and explore"
-save_dir: "/home/hp/mollm_results/deepseek"
+save_dir: "/home/hp/src/mollm_results/"
 save_suffix: "0313_"
 initial_pop: "random1" # best100, worst100, random1 ~ 5
 
 material: False
 model:
-  name: deepseek
+  name: zhongzhuan,gemini-2.0-flash
   prompt_module: Prompt
   experience_prob: 0.
   crossover_prob: 0.8
@@ -21,7 +21,7 @@ optimization:
   ngen: 5
 
 dataset:
-  path: "/home/hp/MOLLM/data/goals5.json"
+  path: "/home/hp/src/MOLLM/data/goals5.json"
 
 init_datset: ZINC
 

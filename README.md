@@ -21,8 +21,8 @@ This repository contains the source code and scripts for the MOLLM project. The 
 └── test.ipynb <br>
 
 ### Running the experiments
-  - `python main.py --config base.yaml`: You only need to config the YAML file to change the settings and goals, path is relative path under config/
-  - `python main.py --config base.yaml --resume`: to automatically resume from last saved .pkl file
+  - `python main.py base.yaml`: You only need to config the YAML file to change the settings and goals, path is relative path under config/
+  - `python main.py base.yaml --resume`: to automatically resume from last saved .pkl file
 
 ### Description of Files and Directories
 

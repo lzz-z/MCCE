@@ -23,6 +23,14 @@ import pygmo as pg
 import pickle
 
 from pymoo.indicators.hv import HV
+from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
+def cal_hv(scores):
+    ref_point = np.array([1.1]*len(scores[0]))
+    hv = HV(ref_point=ref_point)
+    nds = NonDominatedSorting().do(scores,only_non_dominated_front=True)
+    scores = scores[nds]
+    return hv(scores)
+
 def set_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
@@ -252,9 +260,7 @@ class MOO:
         diversity_top100 = self.reward_system.all_evaluators['diversity']([i.value for i in top100])
 
         scores = np.array([i.scores for i in top100])
-        ref_point = np.array([1.0]*len(self.property_list))
-        hv = HV(ref_point=ref_point)
-        volume = hv(scores)
+        volume = cal_hv(scores)
 
         new_score = avg_top100
         # import ipdb; ipdb.set_trace()

@@ -1,13 +1,13 @@
-exper_name: "0.5 experience in middle without mols"
+exper_name: ""
 save_dir: "/home/hp/src/mollm_results/exp"
-save_suffix: "0507_exp0.5_worst100"
-initial_pop: "worst100" # best100, worst100, random1 ~ 5
+save_suffix: "0507_exp0.3"
+initial_pop: "random1" # best100, worst100, random1 ~ 5
 
 material: False
 model:
-  name: zhongzhuan,gpt-4o-2024-05-13
+  name: zhongzhuan,gemini-2.0-flash
   prompt_module: Prompt
-  experience_prob: 0.5
+  experience_prob: 0.3
   crossover_prob: 0.8
   mutation_prob: 0.2 
   explore_prob: 0. 

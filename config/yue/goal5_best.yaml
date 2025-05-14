@@ -1,7 +1,7 @@
 exper_name: "0.5 experience in middle without mols"
 save_dir: "/home/hp/src/mollm_results/exp"
-save_suffix: "0507_exp0.5_worst100"
-initial_pop: "worst100" # best100, worst100, random1 ~ 5
+save_suffix: "0507_exp0.5_best100"
+initial_pop: "best100" # best100, worst100, random1 ~ 5
 
 material: False
 model:

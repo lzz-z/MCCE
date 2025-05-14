@@ -18,27 +18,41 @@ class Prompt:
         pass 
     # 
     def get_prompt(self,prompt_type,ind_list,history_moles):
+        if np.random.random() < self.experience_prob and self.experience is not None:
+            experience = self.experience
+        else:
+            experience = ""
         if prompt_type=='crossover':
-            prompt = self.get_crossover_prompt(ind_list,history_moles)
+            prompt = self.get_crossover_prompt(ind_list,history_moles,experience=experience)
         elif prompt_type == 'mutation':
-            prompt = self.get_mutation_prompt(ind_list,history_moles)
+            prompt = self.get_mutation_prompt(ind_list,history_moles,experience=experience)
         elif prompt_type == 'explore':
             prompt = self.get_exploration_prompt(ind_list,history_moles)
         else:
             raise NotImplementedError('not implemented type of operation:',prompt_type)
-        if np.random.random() < self.experience_prob and self.experience is not None:
-            prompt += self.experience
+        
         
         return prompt
             
-    
-    def get_mutation_prompt(self,ind_list,history_moles):
+    def get_crossover_prompt(self,ind_list,history_moles,experience):
+        requirement_prompt = self.make_requirement_prompt(self.original_mol,self.requirements,self.property)
+        
+        history_prompt = self.make_history_prompt(ind_list)
+        instruction_prompt = self.make_instruction_prompt(oper_type='crossover')
+        description_prompt = self.make_description_prompt()
+        final_prompt = requirement_prompt + description_prompt + experience + history_prompt +  instruction_prompt 
+
+        #return "give me 3 molecules with high QED,Do not write code. Do not give any explanation.\
+        #      Each output new molecule must start with <mol> and end with </mol> in SIMLES form."
+        return final_prompt
+
+    def get_mutation_prompt(self,ind_list,history_moles,experience):
         requirement_prompt = self.make_requirement_prompt(self.original_mol,self.requirements,self.property)
         
         history_prompt = self.make_history_prompt(ind_list[:1])
         instruction_prompt = self.make_instruction_prompt(oper_type='mutation') 
         description_prompt = self.make_description_prompt()
-        final_prompt = requirement_prompt + description_prompt + history_prompt + instruction_prompt 
+        final_prompt = requirement_prompt + description_prompt + experience + history_prompt + instruction_prompt 
         return final_prompt
     
     def get_exploration_prompt(self,ind_list,history_moles):
@@ -58,15 +72,7 @@ class Prompt:
         return final_prompt
 
 
-    def get_crossover_prompt(self,ind_list,history_moles):
-        requirement_prompt = self.make_requirement_prompt(self.original_mol,self.requirements,self.property)
-        
-        history_prompt = self.make_history_prompt(ind_list)
-        instruction_prompt = self.make_instruction_prompt(oper_type='crossover')
-        description_prompt = self.make_description_prompt()
-        final_prompt = requirement_prompt + description_prompt + history_prompt +  instruction_prompt
-        
-        return final_prompt
+    
 
     def make_description_prompt(self):
         prompt = ""
@@ -99,13 +105,11 @@ class Prompt:
             "5. Alter stereochemistry or isomer configurations to explore stereoisomer advantages. \n"
             "6. Consider property-specific optimizations (e.g., hydrophobicity, solubility, binding affinity) to maintain balance. \n"
             "Do not write code. Do not give any explanation. Each output new molecule must start with <mol> and end with </mol> in SIMLES form. \n"
-            "Remember only output 2 molecules"
             )
         elif oper_type=='crossover':
             prompt = ("Give me 2 new better molecules that are different from all points above, and not dominated by any of the above. \n"
             "You can do it by applying crossover on the given points and based on your knowledge. The molecule should be valid. \n"
             "Do not write code. Do not give any explanation. Each output new molecule must start with <mol> and end with </mol> in SIMLES form. \n"
-            "Remember only output 2 molecules"
             )
         elif oper_type=='explore':
             prompt = ("Confidently propose two novel and better molecules different from the given ones, leveraging your expertise, "
@@ -119,7 +123,7 @@ class Prompt:
     
     def make_experience_prompt(self,all_mols):
         experience_type = np.random.choice(['best_f','hvc','pareto'],p=[0.5,0,0.5])
-        print('expereince_type',experience_type,'wrost index',-(self.exp_times+1)*10,-(self.exp_times)*10)
+        #print('expereince_type',experience_type,'wrost index',-(self.exp_times+1)*10,-(self.exp_times)*10)
         worst10 = sorted(all_mols, key=lambda item: item.total, reverse=True)[-(self.exp_times+1)*10:-(self.exp_times)*10]
         if experience_type == 'best_f':
             best100 = sorted(all_mols, key=lambda item: item.total, reverse=True)[:100]
@@ -137,7 +141,7 @@ class Prompt:
                     points.append(all_mols[idx])
                 scores = np.stack(scores)
                 hv_pygmo = pg.hypervolume(scores)
-                hvc = hv_pygmo.contributions(np.array([1.0 for i in range(scores.shape[1])]))
+                hvc = hv_pygmo.contributions(np.array([2.0 for i in range(scores.shape[1])]))
 
                 sorted_indices = np.argsort(hvc)[::-1]  # Reverse to sort in descending order
                 best10 = [points[i] for i in sorted_indices[:10]]
@@ -173,6 +177,9 @@ class Prompt:
                    "Don't describe the given molecules, directly state the experience")
 
         self.exp_times += 1
+
+        history_prompt = self.make_history_prompt(best10[:5],experience=True)
+        bad_history_prompt = self.make_history_prompt(worst10[:5],experience=True)
         return prompt,history_prompt,bad_history_prompt
 
 

@@ -1,0 +1,29 @@
+exper_name: "best_f selection 0.5 + 0.5 pareto selection, 0.0,0.8,0.2,0  for exp, cross, mutate and explore"
+save_dir: "/home/hp/src/mollm_results/direct/3off"
+save_suffix: "0507_"
+initial_pop: "random1" # best100, worst100, random1 ~ 5
+
+material: False
+model:
+  name: zhongzhuan,claude-3-5-haiku-20241022
+  prompt_module: Prompt
+  experience_prob: 0.
+  crossover_prob: 1
+  mutation_prob: 0. #0.25
+  explore_prob: 0. #0.25
+
+
+goals: [qed]
+
+optimization: 
+  pop_size: 50
+  eval_budget: 1500
+  ngen: 5
+
+dataset:
+  path: "/home/hp/src/MOLLM/data/goals5.json"
+
+init_datset: ZINC
+
+
+

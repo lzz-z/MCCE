@@ -40,8 +40,10 @@ class ConfigLoader:
         return "\n".join(lines)
 
 class MOLLM:
-    def __init__(self, config='base.yaml',resume=False,eval=False,seed=42):
+    def __init__(self, config='base.yaml',resume=False,eval=False,seed=42,objective=None):
         self.config = ConfigLoader(config)
+        if objective is not None:
+            self.config.config['goals'] = [objective]
         self.property_list = self.config.get('goals')
         if not eval:
             self.reward_system = RewardingSystem(material=self.config.get('material'),config=self.config)

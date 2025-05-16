@@ -270,11 +270,11 @@ class MOO:
 
         new_score = avg_top100
         # import ipdb; ipdb.set_trace()
-        if (new_score - self.old_score) < 1e-3:
+        if (new_score - self.old_score) < 5e-5:
             self.patience += 1
-            if self.patience >= 10:
+            if self.patience >= 5:
                 print('convergence criteria met, abort ...... ')
-                #self.early_stopping = True
+                self.early_stopping = True
         else:
             self.patience = 0
         self.old_score = new_score

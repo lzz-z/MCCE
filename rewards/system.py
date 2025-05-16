@@ -20,12 +20,12 @@ class RewardingSystem:
     def __init__(self,use_tqdm=False,chunk_size=20,material=False,config=None):
         tdc_func = ['GSK3B','JNK3','DRD2','SA',
                     'QED','LogP','Celecoxib_Rediscovery','Troglitazone_Rediscovery',
-                    'Thiothixene_Rediscovery',
-                    'Aripiprazole_Similarity','Median 1','Median 2',
+                    'Thiothixene_Rediscovery','albuterol_similarity','mestranol_similarity',
+                    'Aripiprazole_Similarity','Median1','Median2',
                     'Isomers_C7H8N2O2','Isomers_C9H10N2O2PF2CL',
                     'Osimertinib_MPO','Fexofenadine_MPO','Ranolazine_MPO',
                     'Perindopril_MPO','Amlodipine_MPO','Sitagliptin_MPO',
-                    'Zaleplon_MPO','Valsartan_SMARTS','Scaffold Hop',]
+                    'Zaleplon_MPO','Valsartan_SMARTS','scaffold_hop','deco_hop']
         
         self.config = config
         tdc_evaluator = ['Diversity','Uniqueness','Validity','Novelty']

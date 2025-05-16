@@ -18,7 +18,11 @@ class Item:
     def cal_sum(self):
         self.total = 0
         for p in self.property_list:
-            if p in ['qed','jnk3','bbbp1']:
+            if p in ['qed','jnk3','drd2','bbbp1','gsk3b','celecoxib_rediscovery', 'troglitazone_rediscovery','thiothixene_rediscovery',
+         'albuterol_similarity','mestranol_similarity',
+        'isomers_c7h8n2o2','isomers_c9h10n2o2pf2cl','median1','median2', 'osimertinib_mpo',
+        'fexofenadine_mpo','ranolazine_mpo','perindopril_mpo', 'amlodipine_mpo',
+        'sitagliptin_mpo','zaleplon_mpo','valsartan_smarts', 'deco_hop', 'scaffold_hop']:
                 self.total += self.property[p]
             elif p == 'sa':
                 self.total += 1- (self.property[p] -1 ) /9
@@ -29,7 +33,7 @@ class Item:
             elif p in ['reduction_potential']:
                 self.total += 1-  abs( np.clip(self.property[p],-2.3,-0.3) +1.3)
             else:
-                raise NotImplementedError("{p} property is not defined in base.py")
+                raise NotImplementedError(f"{p} property is not defined in base.py")
                 
 import pickle
 import os

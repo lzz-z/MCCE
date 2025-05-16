@@ -10,7 +10,7 @@
             },
             "drd2_requ": {
                 "property": "DRD2",
-                "requirement": "decrease"
+                "requirement": "increase"
             },
             "sa_requ": {
                 "property": "SA",
@@ -18,7 +18,7 @@
             },
             "gsk3b_requ": {
                 "property": "GSK3\u03b2",
-                "requirement": "decrease"
+                "requirement": "increase"
             },
             "jnk3_requ": {
                 "property": "JNK3",
@@ -31,7 +31,26 @@
             "logp_requ": {
                 "property": "LogP",
                 "requirement": "increase"
-            }
+            },
+            "celecoxib_rediscovery_requ":{"property": "celecoxib_rediscovery", "requirement": "increase"},
+            "troglitazone_rediscovery_requ":{"property": "troglitazone_rediscovery", "requirement": "increase"},
+            "thiothixene_rediscovery_requ":{"property": "thiothixene_rediscovery", "requirement": "increase"},
+            "albuterol_similarity_requ":{"property": "albuterol_similarity", "requirement": "increase"},
+            "mestranol_similarity_requ":{"property": "mestranol_similarity", "requirement": "increase"},
+            "isomers_c7h8n2o2_requ":{"property": "isomers_c7h8n2o2", "requirement": "increase"},
+            "isomers_c9h10n2o2pf2cl_requ":{"property": "isomers_c9h10n2o2pf2cl", "requirement": "increase"},
+            "median1_requ":{"property": "median1", "requirement": "increase"},
+            "median2_requ":{"property": "median2", "requirement": "increase"},
+            "osimertinib_mpo_requ":{"property": "osimertinib_mpo", "requirement": "increase"},
+            "fexofenadine_mpo_requ":{"property": "fexofenadine_mpo", "requirement": "increase"},
+            "ranolazine_mpo_requ":{"property": "ranolazine_mpo", "requirement": "increase"},
+            "perindopril_mpo_requ":{"property": "perindopril_mpo", "requirement": "increase"},
+            "amlodipine_mpo_requ":{"property": "amlodipine_mpo", "requirement": "increase"},
+            "sitagliptin_mpo_requ":{"property": "sitagliptin_mpo", "requirement": "increase"},
+            "zaleplon_mpo_requ":{"property": "zaleplon_mpo", "requirement": "increase"},
+            "valsartan_smarts_requ":{"property": "valsartan_smarts", "requirement": "increase"},
+            "deco_hop_requ":{"property": "deco_hop", "requirement": "increase"},
+            "scaffold_hop_requ":{"property": "scaffold_hop", "requirement": "increase"}
         }
     ]
 }

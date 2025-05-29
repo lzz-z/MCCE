@@ -13,10 +13,11 @@ from algorithm.base import Item,HistoryBuffer
 from openai import AzureOpenAI
 from tdc.generation import MolGen
 from rdkit.Chem import AllChem
+from rdkit import Chem
 import json
 from eval import get_evaluation
 import time
-from model.util import nsga2_selection,so_selection
+from model.util import nsga2_so_selection
 from algorithm import PromptTemplate
 from eval import judge
 import pygmo as pg
@@ -124,7 +125,6 @@ class MOO:
         data_type = self.config.get('initial_pop')
         print(f'loading {data_type} as initial pop!')
         smiles = data[data_type]
-        #smiles = ['CCH','CCH']   #######################
         return [Item(i,self.property_list) for i in smiles]
         
         filepath = '/home/v-nianran/src/MOLLM/data/zinc250_5goals.pkl'
@@ -156,7 +156,11 @@ class MOO:
         return [Item(i,self.property_list) for i in top_n]
 
     def mutation(self, parent_list):
-        prompt = self.prompt_generator.get_prompt('mutation',parent_list,self.history_moles)
+        use_experience = False
+        if len(self.history_moles)>= self.budget // 2:
+            use_experience = True
+            
+        prompt = self.prompt_generator.get_prompt('mutation',parent_list,self.history_moles,use_experience=use_experience)
         #print('mutation prompt \n\n',prompt)
         
         response = self.llm.chat(prompt)
@@ -166,7 +170,10 @@ class MOO:
         return [Item(smile,self.property_list) for smile in new_smiles],prompt,response
 
     def crossover(self, parent_list):
-        prompt = self.prompt_generator.get_prompt('crossover',parent_list,self.history_moles)
+        use_experience = False
+        if len(self.history_moles)>= self.budget // 2:
+            use_experience = True
+        prompt = self.prompt_generator.get_prompt('crossover',parent_list,self.history_moles,use_experience=use_experience)
         #print('crossover prompt',prompt)
         
         response = self.llm.chat(prompt)
@@ -183,7 +190,7 @@ class MOO:
         #print('response:',response)
         #print('smiles',new_smiles)
         return [Item(smile,self.property_list) for smile in new_smiles],prompt,response
-
+    
     def evaluate(self, smiles_list):
         ops = self.property_list
         res = self.reward_system.evaluate(ops,smiles_list)
@@ -458,9 +465,27 @@ class MOO:
         return smiles,prompt,response
     
     def generate_offspring(self, population, offspring_times):
-        #for _ in range(offspring_times): # 20 10 crossver+mutation 20 
         parents = [random.sample(population, 2) for i in range(offspring_times)]
-
+        '''
+        parents = []
+        scores = np.array([p.total for p in population])
+        prob = scores / np.sum(scores)
+        for _ in range(offspring_times):
+            selected_indices = np.random.choice(len(population), size=2, replace=False, p=prob)
+            pair = [population[i] for i in selected_indices]
+            parents.append(pair)
+        
+        population = sorted(population, key=lambda p: p.total, reverse=True)
+        n = len(population)
+        # 分配权重：rank 1 gets weight n, rank 2 gets n-1, ..., rank n gets weight 1
+        weights = np.array([n - i for i in range(n)], dtype=np.float64)
+        prob = weights / weights.sum()
+        
+        parents = []
+        for _ in range(offspring_times):
+            selected_indices = np.random.choice(n, size=2, replace=False, p=prob)
+            parents.append([population[i] for i in selected_indices])
+        '''
         parallel = True
 
         if parallel:
@@ -479,18 +504,24 @@ class MOO:
                 responses.append(response)
                 self.llm_calls += 1
                     
-        tmp_offspring = []
+
+        offspring = []
         smiles_this_gen = []
         for child_pair in children:
             self.generated_num += len(child_pair)
             for child in child_pair:
-                if child.value in smiles_this_gen:
-                    self.repeat_num += 1
+                mol = Chem.MolFromSmiles(child.value) 
+                if mol is None: # check if valid
+                    self.failed_num += 1
                 else:
-                    tmp_offspring.append(child)
-                    smiles_this_gen.append(child.value)
-        # check if the child is valid
-        offspring = self.check_valid(tmp_offspring)
+                    child.value = Chem.MolToSmiles(mol)
+                    # check if repeated
+                    if child.value in self.history_moles or child.value in smiles_this_gen:
+                        self.repeat_num +=1
+                    else:
+                        smiles_this_gen.append(child.value)
+                        offspring.append(child)
+
         if len(offspring) == 0:
             return []
         self.evaluate_all(offspring)
@@ -498,33 +529,11 @@ class MOO:
         self.history.push(prompts,children,responses) 
         return offspring
 
-    def check_valid(self,children):
-        # may use Chem.MolFromSmiles() to check validity
-        offspring = []
-        for child in children:
-            if self.is_valid(child):
-                offspring.append(child)
-        return offspring
-    
-    def is_valid(self,child):
-        mol = AllChem.MolFromSmiles(child.value)
-        if mol is None:
-            self.failed_num += 1
-            return False
-        if child.value in self.history_moles:
-            self.repeat_num +=1
-            return False
-        return True
-
     def select_next_population(self, population, offspring, pop_size):
         combined_population = offspring + population 
-        #return self.no_selection(combined_population,pop_size) ###############
         #if len(self.property_list)>1:
-        if np.random.random()<0.5:
-            return nsga2_selection(combined_population, pop_size)
-        else:
-            return so_selection(combined_population, pop_size)
-    
+        return nsga2_so_selection(combined_population, pop_size)
+       
     def no_selection(self,combined_population, pop_size):
         return combined_population[:pop_size] 
     
@@ -538,5 +547,6 @@ class MOO:
         sorted_indices = np.argsort(hvc)[::-1]  # Reverse to sort in descending order
         bestn = [pops[i] for i in sorted_indices[:pop_size]]
         return bestn
+
     
  

@@ -73,3 +73,21 @@ def so_selection(population, pop_size):
     # Single objective
     sorted_items = sorted(population, key=lambda item: item.total, reverse=True)[:pop_size]
     return sorted_items
+
+def nsga2_so_selection(population, pop_size):
+    half_size = pop_size//2
+    next_pops = so_selection(population,half_size)
+    current_smis = [i.value for i in next_pops]
+    fronts = fast_non_dominated_sort(population)
+    for front in fronts:
+        candidates = [population[i] for i in front]
+        candidates = sorted(candidates, key=lambda item: item.total, reverse=True)
+        for can in candidates:
+            if len(next_pops) >= pop_size:
+                assert len(next_pops) == pop_size
+                return next_pops
+            if can.value not in current_smis:
+                next_pops.append(can)
+                current_smis.append(can.value)
+            
+

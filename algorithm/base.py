@@ -18,11 +18,14 @@ class Item:
     def cal_sum(self):
         self.total = 0
         for p in self.property_list:
-            if p in ['qed','jnk3','drd2','bbbp1','gsk3b','celecoxib_rediscovery', 'troglitazone_rediscovery','thiothixene_rediscovery',
-         'albuterol_similarity','mestranol_similarity',
-        'isomers_c7h8n2o2','isomers_c9h10n2o2pf2cl','median1','median2', 'osimertinib_mpo',
-        'fexofenadine_mpo','ranolazine_mpo','perindopril_mpo', 'amlodipine_mpo',
-        'sitagliptin_mpo','zaleplon_mpo','valsartan_smarts', 'deco_hop', 'scaffold_hop']:
+            if p in ['qed','jnk3','bbbp1']:
+                '''
+                 'celecoxib_rediscovery', 'troglitazone_rediscovery','thiothixene_rediscovery',
+              'albuterol_similarity','mestranol_similarity',
+             'isomers_c7h8n2o2','isomers_c9h10n2o2pf2cl','median1','median2', 'osimertinib_mpo',
+             'fexofenadine_mpo','ranolazine_mpo','perindopril_mpo', 'amlodipine_mpo',
+             'sitagliptin_mpo','zaleplon_mpo','valsartan_smarts', 'deco_hop', 'scaffold_hop'
+                '''
                 self.total += self.property[p]
             elif p == 'sa':
                 self.total += 1- (self.property[p] -1 ) /9
@@ -45,8 +48,6 @@ class HistoryBuffer:
         self.save_path = 'checkpoint/'
         self.successful_molecules = []
         self.failed_molecules = []
-
-    # 
 
     def save_to_pkl(self, filename):
         with open(os.path.join(self.save_path,filename), 'wb') as f:

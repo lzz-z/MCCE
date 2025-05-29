@@ -5,7 +5,7 @@ commands=(
   #"python main.py yue/goal5_best.yaml --seed 44"
   #"python main.py yue/goal5_best.yaml --seed 45"
   #"python main.py yue/goal5_best.yaml --seed 46"
-  #"python main.py yue/goal5.yaml --seed 44"
+  "python main.py yue/goal5.yaml --seed 44"
   "python main.py yue/goal5.yaml --seed 45"
   "python main.py yue/goal5.yaml --seed 46"
   

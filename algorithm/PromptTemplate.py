@@ -17,7 +17,7 @@ class Prompt:
     def get_final_prompt(self):
         pass 
     # 
-    def get_prompt(self,prompt_type,ind_list,history_moles):
+    def get_prompt(self,prompt_type,ind_list,history_moles,use_experience=False):
         if np.random.random() < self.experience_prob and self.experience is not None:
             experience = self.experience
         else:
@@ -30,7 +30,6 @@ class Prompt:
             prompt = self.get_exploration_prompt(ind_list,history_moles)
         else:
             raise NotImplementedError('not implemented type of operation:',prompt_type)
-        
         
         return prompt
             

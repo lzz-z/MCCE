@@ -122,10 +122,11 @@ class Prompt:
     
     def make_experience_prompt(self,all_mols):
         experience_type = np.random.choice(['best_f','hvc','pareto'],p=[0.5,0,0.5])
+        all_mols = [i[0] for i in all_mols]
         #print('expereince_type',experience_type,'wrost index',-(self.exp_times+1)*10,-(self.exp_times)*10)
-        worst10 = sorted(all_mols, key=lambda item: item[0].total, reverse=True)[-(self.exp_times+1)*10:-(self.exp_times)*10]
+        worst10 = sorted(all_mols, key=lambda item: item.total, reverse=True)[-(self.exp_times+1)*10:-(self.exp_times)*10]
         if experience_type == 'best_f':
-            best100 = sorted(all_mols, key=lambda item: item[0].total, reverse=True)[:100]
+            best100 = sorted(all_mols, key=lambda item: item.total, reverse=True)[:100]
             best10 = np.random.choice(best100,size=10,replace=False)
         elif experience_type == 'hvc':
             best100,fronts = nsga2_selection(all_mols,pop_size=100,return_fronts=True)

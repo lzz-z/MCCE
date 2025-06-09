@@ -5,7 +5,7 @@ initial_pop: "random1" # best100, worst100, random1 ~ 5
 
 material: False
 model:
-  name: zgca,gemini-2.5-flash
+  name: zgca,gemini-2.5-flash-preview-04-17-nothinking
   prompt_module: Prompt
   experience_prob: 0.5
   crossover_prob: 0.8

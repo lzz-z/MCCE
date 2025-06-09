@@ -88,7 +88,6 @@ class MOO:
         self.init_mol_dataset()
         self.prompt_module = getattr(PromptTemplate ,self.config.get('model.prompt_module',default='Prompt'))
         self.history_moles = []
-        self.all_mols = []
         self.mol_buffer = [] # same as all_mols but with orders for computing auc
         self.results_dict = {'results':[]}
         self.history_experience = []
@@ -174,8 +173,7 @@ class MOO:
         if len(self.history_moles)>= self.budget // 2:
             use_experience = True
         prompt = self.prompt_generator.get_prompt('crossover',parent_list,self.history_moles,use_experience=use_experience)
-        #print('crossover prompt',prompt)
-        
+      
         response = self.llm.chat(prompt)
         #print('response:',response,'\n\n\n')
         #assert False
@@ -185,7 +183,7 @@ class MOO:
     
     def explore(self, parent_list):
         # Deprecated
-        prompt = self.prompt_generator.get_prompt('explore',parent_list,self.all_mols)
+        prompt = self.prompt_generator.get_prompt('explore',parent_list,self.mol_buffer)
         response = self.llm.chat(prompt)
         new_smiles = extract_smiles_from_string(response)
         #print('response:',response)
@@ -258,7 +256,6 @@ class MOO:
             if i.value not in self.history_moles:
                 self.history_moles.append(i.value)
             self.mol_buffer.append([i, len(self.mol_buffer)+1])
-            #self.all_mols.append(i)
 
     def log(self,finish=False):
         auc1 = top_auc(self.mol_buffer, 1, finish=finish, freq_log=100, max_oracle_calls=self.budget)
@@ -292,11 +289,6 @@ class MOO:
             top10_bbbp = np.mean([i.property['bbbp'] for i in top10])
             top100_bbbp = np.mean([i.property['bbbp'] for i in top100])
             
-            # already = 0
-            #all_zinc_mols = self.moles_df.smiles.values
-            #for i in self.all_mols:
-            #    if i.value in all_zinc_mols:
-            #        already += 1 
             self.results_dict['results'].append(
                 {   'all_unique_moles': len(self.history_moles),
                     'llm_calls': self.llm_calls,
@@ -375,7 +367,7 @@ class MOO:
         
 
     def update_experience(self):
-        prompt,best_moles_prompt,bad_moles_prompt = self.prompt_generator.make_experience_prompt(self.all_mols)
+        prompt,best_moles_prompt,bad_moles_prompt = self.prompt_generator.make_experience_prompt(self.mol_buffer)
         response = self.llm.chat(prompt)
         
         #self.prompt_generator.experience = (f"I already have some experience, take advantage of them :{response}"

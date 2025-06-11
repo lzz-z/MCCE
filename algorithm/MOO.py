@@ -536,7 +536,7 @@ class MOO:
             scores.append(pop.scores)
         scores = np.stack(scores)
         hv_pygmo = pg.hypervolume(scores)
-        hvc = hv_pygmo.contributions(np.array([1.0 for i in range(scores.shape[1])]))
+        hvc = hv_pygmo.contributions(np.array([1.1 for i in range(scores.shape[1])]))
         sorted_indices = np.argsort(hvc)[::-1]  # Reverse to sort in descending order
         bestn = [pops[i] for i in sorted_indices[:pop_size]]
         return bestn

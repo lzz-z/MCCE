@@ -84,7 +84,7 @@ class MOLLM:
             self.init_pops.append(init_pops)
             if (i)%1 ==0:
                 self.evaluate() # evaluate self.final_pops and self.init_pops
-            self.save_to_pkl(self.save_path)
+            self.save_to_pkl(self.save_path,i)
 
 
 
@@ -109,7 +109,7 @@ class MOLLM:
         }
         return r
 
-    def save_to_pkl(self, filepath):
+    def save_to_pkl(self, filepath,i=0):
         data = {
             'history':self.history,
             'init_pops':self.init_pops,
@@ -119,7 +119,8 @@ class MOLLM:
         }
         with open(filepath, 'wb') as f:
             pickle.dump(data, f)
-        print(f"Data saved to {filepath}")
+        if i% 10==0:
+            print(f"Data saved to {filepath}")
 
     def load_from_pkl(self,filepath):
         with open(filepath, 'rb') as f:

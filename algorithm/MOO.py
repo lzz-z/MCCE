@@ -23,6 +23,9 @@ from eval import judge
 import pygmo as pg
 import pickle
 
+from genetic_gfn.multi_objective.genetic_gfn.run import Genetic_GFN_Optimizer
+from genetic_gfn.multi_objective.run import prepare_optimization_inputs
+
 def set_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
@@ -56,12 +59,17 @@ class MOO:
         self.moles_df = None
         self.pop_size = self.config.get('optimization.pop_size')
         self.budget = self.config.get('optimization.eval_budget')
+        self.use_au = self.config.get('use_au')
         self.save_dir = os.path.join(self.config.get('save_dir'),self.config.get('model.name'))
         self.init_mol_dataset()
         self.prompt_module = getattr(PromptTemplate ,self.config.get('model.prompt_module',default='Prompt'))
         self.history_moles = []
         self.mol_buffer = [] # same as all_mols but with orders for computing auc
+        self.main_mol_buffer = []
+        self.au_mol_buffer = []
         self.results_dict = {'results':[]}
+        self.main_results_dict = {'results':[]}
+        self.au_results_dict = {'results':[]}
         self.history_experience = []
         self.repeat_num = 0
         self.failed_num = 0
@@ -70,6 +78,14 @@ class MOO:
         self.patience = 0
         self.old_score = 0
         self.early_stopping = False
+        self.record_dict = {}
+        for i in ['main','au']:
+            for j in ['all_num','failed_num','repeat_num']:
+                self.record_dict[i+'_'+j] = 0
+        self.record_dict['main_history_smiles'] = []
+        self.record_dict['au_history_smiles'] = []
+        self.time_step = 0
+
     def init_mol_dataset(self):
         print('Loading ZINC dataset...')
         data = MolGen(name='ZINC')
@@ -227,7 +243,10 @@ class MOO:
         for i in pops:
             if i.value not in self.history_moles:
                 self.history_moles.append(i.value)
-            self.mol_buffer.append([i, len(self.mol_buffer)+1])
+                self.mol_buffer.append([i, len(self.mol_buffer)+1])
+            else:
+                print('this place should not have repeated smiles')
+                assert False
 
     def log(self,finish=False):
         auc1 = top_auc(self.mol_buffer, 1, finish=finish, freq_log=100, max_oracle_calls=self.budget)
@@ -247,96 +266,118 @@ class MOO:
 
         new_score = avg_top100
         # import ipdb; ipdb.set_trace()
-        if (new_score - self.old_score) < 5e-5:
+        if new_score == self.old_score:
             self.patience += 1
-            if self.patience >= 5:
+            if self.patience >= 6:
                 print('convergence criteria met, abort ...... ')
                 self.early_stopping = True
         else:
             self.patience = 0
         self.old_score = new_score
-        
-        if 'bbbp' in self.property_list:
-            top1_bbbp = top10[0].property['bbbp']
-            top10_bbbp = np.mean([i.property['bbbp'] for i in top10])
-            top100_bbbp = np.mean([i.property['bbbp'] for i in top100])
-            
-            self.results_dict['results'].append(
-                {   'all_unique_moles': len(self.history_moles),
-                    'llm_calls': self.llm_calls,
-                    'Uniqueness':1-self.repeat_num/(self.generated_num+1e-6),
-                    'Validity':1-self.failed_num/(self.generated_num+1e-6),
-                    #'Novelty':1-already/(self.generated_num+1e-6),
-                    'avg_top1':top10[0].total,
-                    'avg_top10':avg_top10,
-                    'avg_top100':avg_top100,
-                    'top1_auc':auc1,
-                    'top10_auc':auc10,
-                    'top100_auc':auc100,
-                    'hypervolume':volume,
-                    'bbbp_top1':top1_bbbp,
-                    'bbbp_top10':top10_bbbp,
-                    'bbbp_top100':top100_bbbp,
-                    'div':diversity_top100,
-                    'generated_num':self.generated_num
-                })
-            print(f'{len(self.history_moles)}/{self.budget} /all generated: {self.generated_num} | '
-                f'Uniqueness:{1-self.repeat_num/(self.generated_num+1e-6):.4f} | '
-                f'Validity:{1-self.failed_num/(self.generated_num+1e-6):.4f} | '
-                #f'Novelty:{1-already/(self.generated_num+1e-6):.4f} | '
-                f'llm_calls: {self.llm_calls} | '
-                f'avg_top1: {top10[0].total:.4f} | '
-                f'avg_top10: {avg_top10:.4f} | '
-                f'avg_top100: {avg_top100:.4f} | '
-                f'avg_top1 bbbp: {top1_bbbp:.4f} | '
-                f'avg_top10 bbbp: {top10_bbbp:.4f} | '
-                f'avg_top100 bbbp: {top100_bbbp:.4f} | '
-                f'top1_auc : {auc1:.4f} | '
-                f'top10_auc : {auc10:.4f} | '
-                f'top100_auc : {auc100:.4f} | '
-                f'hv: {volume:.4f} | '
-                f'div: {diversity_top100:.4f}')
-        else:
-            self.results_dict['results'].append(
-                {   'all_unique_moles': len(self.history_moles),
-                    'llm_calls': self.llm_calls,
-                    'Uniqueness':1-self.repeat_num/(self.generated_num+1e-6),
-                    'Validity':1-self.failed_num/(self.generated_num+1e-6),
-                    #'Novelty':1-already/(self.generated_num+1e-6),
-                    'avg_top1':top10[0].total,
-                    'avg_top10':avg_top10,
-                    'avg_top100':avg_top100,
-                    'top1_auc':auc1,
-                    'top10_auc':auc10,
-                    'top100_auc':auc100,
-                    'hypervolume':volume,
-                    'div':diversity_top100,
-                    'generated_num':self.generated_num})
-            print(f'{len(self.history_moles)}/{self.budget}/all generated: {self.generated_num} | '
-                  f'len mol_buffer{len(self.mol_buffer)} | '
-                f'Uniqueness:{1-self.repeat_num/(self.generated_num+1e-6):.4f} | '
-                f'Validity:{1-self.failed_num/(self.generated_num+1e-6):.4f} | '
-                #f'Novelty:{1-already/(self.generated_num+1e-6):.4f} | '
-                f'llm_calls: {self.llm_calls} | '
-                f'avg_top1: {top10[0].total:.4f} | '
-                f'avg_top10: {avg_top10:.4f} | '
-                f'avg_top100: {avg_top100:.4f} | '
-                f'top1_auc : {auc1:.4f} | '
-                f'top10_auc : {auc10:.4f} | '
-                f'top100_auc : {auc100:.4f} | '
-                f'hv: {volume:.4f} | '
-                f'div: {diversity_top100:.4f}')
+        self.results_dict['results'].append(
+            {   'all_unique_moles': len(self.history_moles),
+                'llm_calls': self.llm_calls,
+                'Uniqueness':1-self.repeat_num/(self.generated_num+1e-6),
+                'Validity':1-self.failed_num/(self.generated_num+1e-6),
+                #'Novelty':1-already/(self.generated_num+1e-6),
+                'avg_top1':top10[0].total,
+                'avg_top10':avg_top10,
+                'avg_top100':avg_top100,
+                'top1_auc':auc1,
+                'top10_auc':auc10,
+                'top100_auc':auc100,
+                'hypervolume':volume,
+                'div':diversity_top100,
+                'generated_num':self.generated_num})
+        print(f'{len(self.history_moles)}/{self.budget}/all generated: {self.generated_num} | '
+                f'len mol_buffer{len(self.mol_buffer)} | '
+            f'Uniqueness:{1-self.repeat_num/(self.generated_num+1e-6):.4f} | '
+            f'Validity:{1-self.failed_num/(self.generated_num+1e-6):.4f} | '
+            #f'Novelty:{1-already/(self.generated_num+1e-6):.4f} | '
+            f'llm_calls: {self.llm_calls} | '
+            f'training step:{self.time_step} |'
+            f'all generated: {self.generated_num}|' 
+            f'avg_top1: {top10[0].total:.4f} | '
+            f'avg_top10: {avg_top10:.4f} | '
+            f'avg_top100: {avg_top100:.4f} | '
+            f'top1_auc : {auc1:.4f} | '
+            f'top10_auc : {auc10:.4f} | '
+            f'top100_auc : {auc100:.4f} | '
+            f'hv: {volume:.4f} | '
+            f'div: {diversity_top100:.4f}')
+        print('================================================================')
         
         json_path = os.path.join(self.save_dir,"results",'_'.join(self.property_list) + '_' + self.config.get('save_suffix') + f'_{self.seed}'+'.json')
         if not os.path.exists(os.path.dirname(json_path)):
             os.makedirs(os.path.dirname(json_path), exist_ok=True)
             
         self.results_dict['params'] = self.config.to_string()
-        self.results_dict['history_experience']  = self.history_experience
+        if len(self.history_experience)> 1:
+            # only store the first and the last experience
+            self.results_dict['history_experience']  = [self.history_experience[0]] + [self.history_experience[-1]]
         with open(json_path,'w') as f:
             json.dump(self.results_dict, f, indent=4)
         
+    def log_mol_buffer(self,mol_buffer,buffer_type, finish=False):
+        auc1 = top_auc(mol_buffer, 1, finish=finish, freq_log=100, max_oracle_calls=self.budget)
+        auc10 = top_auc(mol_buffer, 10, finish=finish, freq_log=100, max_oracle_calls=self.budget)
+        auc100 = top_auc(mol_buffer, 100, finish=finish, freq_log=100, max_oracle_calls=self.budget)
+
+        top100 = sorted(mol_buffer, key=lambda item: item[0].total, reverse=True)[:100]
+        top100 = [i[0] for i in top100]
+        top10 = top100[:10]
+        avg_top10 = np.mean([i.total for i in top10])
+        avg_top100 = np.mean([i.total for i in top100])
         
+        diversity_top100 = self.reward_system.all_evaluators['diversity']([i.value for i in top100])
+
+        scores = np.array([i.scores for i in top100])
+        volume = cal_hv(scores)
+        uniqueness = 1- self.record_dict[buffer_type+'_repeat_num'] / self.record_dict[buffer_type+'_all_num']
+        validity = 1- self.record_dict[buffer_type+'_failed_num'] / self.record_dict[buffer_type+'_all_num']
+        
+        print(f'{buffer_type}: all num{self.record_dict[buffer_type+"_all_num"]} | '
+            f'mol_buffer length: {len(mol_buffer)}  | '
+            f'Uniqueness:{uniqueness:.4f} | '
+            f'Validity:{validity:.4f} | '
+            f'Training step:{self.time_step}  |'
+            f'all generated:{self.generated_num}  |'             #f'Novelty:{1-already/(self.generated_num+1e-6):.4f} | '
+            f'avg_top1: {top10[0].total:.4f} | '
+            f'avg_top10: {avg_top10:.4f} | '
+            f'avg_top100: {avg_top100:.4f} | '
+            f'top1_auc : {auc1:.4f} | '
+            f'top10_auc : {auc10:.4f} | '
+            f'top100_auc : {auc100:.4f} | '
+            f'hv: {volume:.4f} | '
+            f'div: {diversity_top100:.4f}')
+        
+        json_path = os.path.join(self.save_dir,"results_"+buffer_type,'_'.join(self.property_list) + '_' + self.config.get('save_suffix') + f'_{self.seed}'+'.json')
+        if not os.path.exists(os.path.dirname(json_path)):
+            os.makedirs(os.path.dirname(json_path), exist_ok=True)
+        
+        if buffer_type=='main':
+            results_dict = self.main_results_dict
+        elif buffer_type=='au':
+            results_dict = self.au_results_dict
+        results_dict['results'].append(
+            {   'all_unique_moles': len(self.history_moles),
+                'llm_calls': self.llm_calls,
+                'Uniqueness':uniqueness,
+                'Validity':validity,
+                'Training_step':self.time_step,
+                'all_generated': self.generated_num,
+                #'Novelty':1-already/(self.generated_num+1e-6),
+                'avg_top1':top10[0].total,
+                'avg_top10':avg_top10,
+                'avg_top100':avg_top100,
+                'top1_auc':auc1,
+                'top10_auc':auc10,
+                'top100_auc':auc100,
+                'hypervolume':volume,
+                'div':diversity_top100,
+                'generated_num':self.generated_num})
+        with open(json_path,'w') as f:
+            json.dump(results_dict, f, indent=4)        
 
     def update_experience(self):
         prompt,best_moles_prompt,bad_moles_prompt = self.prompt_generator.make_experience_prompt(self.mol_buffer)
@@ -356,7 +397,14 @@ class MOO:
         self.history_experience.append(self.prompt_generator.experience) 
         print('length exp:',len(self.prompt_generator.experience))
 
+
+
     def run(self, prompt,requirements):
+        ''' initialize genetic gfn model'''
+        args, config_default, oracle = prepare_optimization_inputs()
+        self.au_model = Genetic_GFN_Optimizer(args=args)
+        self.au_model.setup_model(oracle, config_default)
+
         """High level logic"""
         print('exper_name',self.config.get('exper_name'))
         set_seed(self.seed)
@@ -391,6 +439,9 @@ class MOO:
                 self.update_experience()
             if len(self.mol_buffer) >= self.budget or self.early_stopping:
                 self.log(finish=True)
+                if self.use_au:
+                    self.log_mol_buffer(self.main_mol_buffer,buffer_type="main", finish=True)
+                    self.log_mol_buffer(self.au_mol_buffer,buffer_type="au", finish=True)
                 break
             self.num_gen+=1
             data = {
@@ -404,10 +455,52 @@ class MOO:
             }
             with open(store_path, 'wb') as f:
                 pickle.dump(data, f)
-            print(f"Data saved to {store_path}")
+            if self.num_gen%10==0:
+                print(f"Data saved to {store_path}")
         print(f'=======> total running time { (time.time()-start_time)/3600 :.2f} hours <=======')
         
         return init_pops,population  # 计算效率
+
+    def sanitize(self,tmp_offspring,record=True):
+        offspring = []
+        smiles_this_gen = []
+        for child in tmp_offspring:
+            mol = Chem.MolFromSmiles(child.value) 
+            if mol is None: # check if valid
+                if record:
+                    self.failed_num += 1
+            else:
+                child.value = Chem.MolToSmiles(mol,canonical=True)
+                # check if repeated
+                if child.value in self.history_moles or child.value in smiles_this_gen:
+                    if record:
+                        self.repeat_num +=1
+                    else:
+                        offspring.append(child)
+                else:
+                    smiles_this_gen.append(child.value)
+                    offspring.append(child)
+        return offspring
+
+    def record(self,tmp_offspring,buffer_type):
+        offspring = []
+        smiles_this_gen = []
+        self.record_dict[buffer_type+'_all_num'] += len(tmp_offspring)
+        for child in tmp_offspring:
+            mol = Chem.MolFromSmiles(child.value) 
+            if mol is None: # check if valid
+                self.record_dict[buffer_type+'_failed_num'] += 1
+            else:
+                child.value = Chem.MolToSmiles(mol)
+                # check if repeated
+                if child.value in self.record_dict[buffer_type+'_history_smiles'] or child.value in smiles_this_gen:
+
+                    self.record_dict[buffer_type+'_repeat_num']+=1
+                else:
+                    self.record_dict[buffer_type+'_history_smiles'].append(child.value)
+                    smiles_this_gen.append(child.value)
+                    offspring.append(child)
+        return offspring
 
     def mating(self,parent_list):
         crossover_prob = self.config.get('model.crossover_prob')
@@ -417,7 +510,7 @@ class MOO:
         explore_prob = self.config.get('model.explore_prob')
         
         
-        cycle_length = 10
+        #cycle_length = 10
         #explore_prob = 0.25 + 0.7 * (np.cos(2 * np.pi * self.num_gen / cycle_length) + 1) / 2 
         #crossover_prob = (1 - explore_prob) * (2/3)
         #mutation_prob = 1 - explore_prob - crossover_prob
@@ -431,28 +524,8 @@ class MOO:
     
     def generate_offspring(self, population, offspring_times):
         parents = [random.sample(population, 2) for i in range(offspring_times)]
-        '''
-        parents = []
-        scores = np.array([p.total for p in population])
-        prob = scores / np.sum(scores)
-        for _ in range(offspring_times):
-            selected_indices = np.random.choice(len(population), size=2, replace=False, p=prob)
-            pair = [population[i] for i in selected_indices]
-            parents.append(pair)
-        
-        population = sorted(population, key=lambda p: p.total, reverse=True)
-        n = len(population)
-        # 分配权重：rank 1 gets weight n, rank 2 gets n-1, ..., rank n gets weight 1
-        weights = np.array([n - i for i in range(n)], dtype=np.float64)
-        prob = weights / weights.sum()
-        
-        parents = []
-        for _ in range(offspring_times):
-            selected_indices = np.random.choice(n, size=2, replace=False, p=prob)
-            parents.append([population[i] for i in selected_indices])
-        '''
         parallel = True
-
+        '''
         if parallel:
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 futures = [executor.submit(self.mating, parent_list=parent_list) for parent_list in parents]
@@ -468,31 +541,65 @@ class MOO:
                 prompts.append(prompt)
                 responses.append(response)
                 self.llm_calls += 1
-                    
-
-        offspring = []
-        smiles_this_gen = []
+        
+        tmp_offspring = []
         for child_pair in children:
             self.generated_num += len(child_pair)
-            for child in child_pair:
-                mol = Chem.MolFromSmiles(child.value) 
-                if mol is None: # check if valid
-                    self.failed_num += 1
-                else:
-                    child.value = Chem.MolToSmiles(mol)
-                    # check if repeated
-                    if child.value in self.history_moles or child.value in smiles_this_gen:
-                        self.repeat_num +=1
-                    else:
-                        smiles_this_gen.append(child.value)
-                        offspring.append(child)
+            tmp_offspring.extend(child_pair)
+        '''
+        ##########
+        prompts = []
+        responses = []
+        children = []
+        if self.use_au:
+            if len(self.mol_buffer) > 0:
+                au_smiles = self.au_model.sample_n_smiles(32,self.mol_buffer)
+                tmp_offspring = [Item(smiles,self.property_list) for smiles in au_smiles]
+                self.generated_num += len(au_smiles)
+        ############
 
+        if self.use_au:
+            self.record(tmp_offspring,'main')
+            self.save_log_mols(tmp_offspring,buffer_type='main')
+            if len(self.mol_buffer) > 0:
+                au_smiles = self.au_model.sample_n_smiles(32,self.mol_buffer)
+                au_smiles = [Item(smiles,self.property_list) for smiles in au_smiles]
+                self.generated_num += len(au_smiles)
+                self.record(au_smiles,'au')
+                self.save_log_mols(au_smiles,buffer_type='au')
+                tmp_offspring.extend(au_smiles)
+
+        offspring = self.sanitize(tmp_offspring,record=True)
+        
+        au_smiles = [i[0] for i in self.au_model.experience.memory]
+        repeat_au = len(au_smiles) - len(np.unique(au_smiles))
+        print('repeat in au:', repeat_au)
         if len(offspring) == 0:
             return []
+
         self.evaluate_all(offspring)
+        #if self.use_au:
+        #    self.au_model.train_on_smiles([i.value for i in offspring],[i.total for i in offspring])
         self.store_history_moles(offspring)
         self.history.push(prompts,children,responses) 
         return offspring
+    
+    def save_log_mols(self,mols,buffer_type):
+        self.time_step += 1
+        mols = self.sanitize(mols,record=False)
+        self.evaluate_all(mols)
+        if buffer_type=='main':
+            mol_buffer = self.main_mol_buffer
+            self.au_model.train_on_smiles([i.value for i in mols],[i.total for i in mols],loop=4,time_step=self.time_step)
+        elif buffer_type=='au':
+            mol_buffer = self.au_mol_buffer
+            self.au_model.train_on_smiles([i.value for i in mols],[i.total for i in mols],loop=4,time_step=self.time_step)
+        for mol in mols:
+            mol_buffer.append([mol, len(mol_buffer)+1])
+        
+        self.log_mol_buffer(mol_buffer,buffer_type, finish=False)
+
+
 
     def select_next_population(self, population, offspring, pop_size):
         combined_population = offspring + population 

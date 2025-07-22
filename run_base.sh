@@ -2,11 +2,11 @@
 
 # Define the Python scripts to run in the order
 commands=(
-  "python main.py yue/goal5.yaml --seed 42"
-  "python main.py yue/goal5.yaml --seed 43"
-  "python main.py yue/goal5.yaml --seed 44"
-  "python main.py yue/goal5.yaml --seed 45"
-  "python main.py yue/goal5.yaml --seed 46"
+  "python main.py molecules/goal5_gemini.yaml --seed 42"
+  "python main.py molecules/goal5_gemini.yaml --seed 43"
+  "python main.py molecules/goal5_gemini.yaml --seed 44"
+  "python main.py molecules/goal5_gemini.yaml --seed 45"
+  "python main.py molecules/goal5_gemini.yaml --seed 46"
   
 )
 

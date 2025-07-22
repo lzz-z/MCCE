@@ -67,7 +67,7 @@ def get_evaluation(evaluate_metric, smiles):
     return result
 
 def extract_smiles_from_string(text):
-    pattern = r"<mol>(.*?)</mol>"
+    pattern = r"<candidate>(.*?)</candidate>"
     smiles_list = re.findall(pattern, text)
     return smiles_list
 

@@ -14,44 +14,37 @@ class Item:
         """
         self.value = value
         self.property_list = property_list
-        self.assign_raw_scores([0.0 for _ in self.property_list])
-        self.scores = [0.0 for _ in self.property_list]
-        self.total = 0.0
+        self.total = None
+        self.scores = None
+        self.property = None
 
-    def assign_raw_scores(self, scores: List[float]) -> None:
+    def assign_results(self,results:Dict):
+        self.property = results['original_results']
+        self.scores = [results['transformed_results'][obj] for obj in self.property_list]
+        self.total = results['overall_score']
+
+class ItemFactory:
+    def __init__(self, property_list: List[str]) -> None:
         """
-        Assigns raw (original) scores to each property and computes the total score.
+        Factory class to generate Item instances with a predefined property_list.
 
         Args:
-            scores (List[float]): Values corresponding to each property in property_list.
+            property_list (List[str]): The list of property names to assign to each Item.
         """
-        self.raw_scores = scores
-        self.property = {
-            self.property_list[i]: scores[i] for i in range(len(self.property_list))
-        }
-        self.cal_sum()
+        self.property_list = property_list
 
-    def cal_sum(self) -> None:
+    def create(self, value: str) -> Item:
         """
-        Calculates the overall total score based on property-specific scoring rules.
+        Create a new Item with the factory's property_list.
+
+        Args:
+            value (str): The molecule's SMILES string or identifier.
+
+        Returns:
+            Item: A new Item instance.
         """
-        self.total = 0.0
-        for p in self.property_list:
-            val = self.property[p]
-            if p in ['qed', 'jnk3', 'bbbp1']:
-                self.total += val
-            elif p == 'sa':
-                self.total += 1 - (val - 1) / 9
-            elif p in ['gsk3b', 'drd2', 'smarts_filter']:
-                self.total += 1 - val
-            elif p == 'logs':
-                self.total += (val + 8) / 9
-            elif p == 'reduction_potential':
-                self.total += 1 - abs(np.clip(val, -2.3, -0.3) + 1.3)
-            else:
-                raise NotImplementedError(f"Property '{p}' is not defined in Item scoring rules.")
-
-
+        return Item(value, self.property_list)
+    
 class HistoryBuffer:
     def __init__(self) -> None:
         """

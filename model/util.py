@@ -1,6 +1,20 @@
 import numpy as np
 from pymoo.indicators.hv import HV
 from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
+import pygmo as pg
+import re
+
+def extract_smiles_from_string(text):
+    pattern = r"<candidate>(.*?)</candidate>"
+    smiles_list = re.findall(pattern, text)
+    return smiles_list
+
+def split_list(lst, n):
+    """Splits the list lst into n nearly equal parts."""
+    k, m = divmod(len(lst), n)
+    return [lst[i*k + min(i, m):(i+1)*k + min(i+1, m)] for i in range(n)]
+
+
 def fast_non_dominated_sort(population):
     S = [[] for _ in range(len(population))]
     front = [[]]
@@ -92,7 +106,20 @@ def nsga2_so_selection(population, pop_size):
             if can.value not in current_smis:
                 next_pops.append(can)
                 current_smis.append(can.value)
+    return next_pops
             
+def hvc_selection(pops,pop_size):
+    scores = []
+    for pop in pops:
+        scores.append(pop.scores)
+    scores = np.stack(scores)
+    hv_pygmo = pg.hypervolume(scores)
+    hvc = hv_pygmo.contributions(np.array([1.1 for i in range(scores.shape[1])]))
+    sorted_indices = np.argsort(hvc)[::-1]  # Reverse to sort in descending order
+    bestn = [pops[i] for i in sorted_indices[:pop_size]]
+    return bestn
+
+
 def top_auc(buffer, top_n, finish, freq_log, max_oracle_calls):
     sum = 0
     prev = 0

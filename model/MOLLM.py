@@ -1,15 +1,15 @@
 import yaml
 import json
-from rewards.system import RewardingSystem
 from model.LLM import LLM
 import os
 import pickle
 from algorithm.MOO import MOO
 from eval import eval_mo_results,mean_sr
 import pandas as pd
+import importlib
 class ConfigLoader:
     def __init__(self, config_path="config.yaml"):
-        config_path = os.path.join('config',config_path)
+        config_path = os.path.join('problem',config_path)
         self.config = self._load_config(config_path)
 
     def _load_config(self, config_path):
@@ -46,11 +46,13 @@ class MOLLM:
             self.config.config['goals'] = [objective]
         self.property_list = self.config.get('goals')
         if not eval:
-            self.reward_system = RewardingSystem(material=self.config.get('material'),config=self.config)
+            module_path = self.config.get('evalutor_path')  # e.g., "molecules"
+            module = importlib.import_module(module_path)
+            RewardingSystem = getattr(module, "RewardingSystem")
+            self.reward_system = RewardingSystem(config=self.config)
         self.llm = LLM(model = self.config.get('model.name'))
         self.seed = seed
         self.history = []
-        self.load_dataset()
         self.init_pops = []
         self.final_pops = []
         self.start_index = 0
@@ -68,23 +70,18 @@ class MOLLM:
             'success num each problem': []
         }
     
-    def load_dataset(self):
-        with open(self.config.get('dataset.path'), 'r') as json_file:
-            self.dataset= json.load(json_file)
-    
     def run(self):
         if self.resume:
             self.load_from_pkl(self.save_path)
-        for i in range(self.start_index,len(self.dataset['prompts'])):
-            print(f'start {i+1}')
-            moo = MOO(self.reward_system, self.llm,self.property_list,self.config,self.seed)
-            init_pops,final_pops = moo.run(self.dataset['prompts'][i], self.dataset['requirements'][i])
-            self.history.append(moo.history)
-            self.final_pops.append(final_pops)
-            self.init_pops.append(init_pops)
-            if (i)%1 ==0:
-                self.evaluate() # evaluate self.final_pops and self.init_pops
-            self.save_to_pkl(self.save_path,i)
+
+        moo = MOO(self.reward_system, self.llm,self.property_list,self.config,self.seed)
+        init_pops,final_pops = moo.run()
+        self.history.append(moo.history)
+        self.final_pops.append(final_pops)
+        self.init_pops.append(init_pops)
+
+        self.evaluate() # evaluate self.final_pops and self.init_pops
+        self.save_to_pkl(self.save_path)
 
     def load_evaluate(self):
         self.load_from_pkl(self.save_path)

@@ -1,0 +1,27 @@
+
+
+
+
+prompt example: This task is to propose better molecules according to the multiple objectives.suggest new candidates that satisfy the following requirements:
+1. minimize the sa value.
+2. minimize the drd2 value.
+3. maximize the qed value.
+4. minimize the gsk3b value.
+5. maximize the jnk3 value.
+sa: SA measures how easily a molecule can be synthesized based on its structural complexity. Simplifying a molecule by reducing complex ring systems or functional groups can lower SA, making synthesis easier, while adding complex structures can increase SA, making synthesis harder.
+drd2: Dopamine receptor D2 (DRD2) is a receptor involved in the modulation of neurotransmission and is a target for various psychiatric and neurological disorders. Adding functional groups like hydroxyl or halogen atoms to aromatic rings can enhance binding affinity to DRD2. Removing aromaticity or introducing bulky groups near the binding sites often decreases DRD2 activity.
+qed: QED (Quantitative Estimate of Drug-likeness) is a measure that quantifieshow 'drug-like' a molecule is based on properties such as molecular weight,solubility, and the number of hydrogen bond donors and acceptors.Adding functional groups that improve drug-like properties (e.g., small molecular size,balanced hydrophilicity) can increase QED, while introducing large, complex, or highly polar groups can decrease it.
+gsk3b: Glycogen synthase kinase-3 beta (GSK3β) is an enzyme involved in cellular processes like metabolism and apoptosis, and is a therapeutic target for cancer and neurological diseases.Adding polar groups, such as hydroxyls, can improve hydrogen bonding with GSK3β's active site.Introducing steric hindrance or highly hydrophobic regions can reduce interactions with GSK3β.
+jnk3: c-Jun N-terminal kinase 3 (JNK3) is a kinase involved in stress signaling and is targeted for neuroprotection in diseases like Alzheimer's.Introducing small polar or electronegative groups can enhance binding affinity to JNK3.Removing polar functional groups or adding large, bulky substituents can reduce activity by obstructing the active site.
+I have some candidates with their objective values. The total score is the integration of all property values; a higher total score means a better candidate.
+<candidate>N#C[C@H](COC(=O)[C@@H]1CCOc2ccccc21)Cc1cccs1</candidate>, its property values are: sa:3.4825, drd2:0.0002, qed:0.7882, gsk3b:0.0200, jnk3:0.0200, total: 3.5121
+Generate 2 new better candidates through mutation, ensuring they are different from all points provided above and not dominated by any of them.
+The candidates must be valid.Example operations include:
+1. Modify functional groups
+2. Replace atoms or bonds
+3. Add/remove small substituents
+4. Ring modifications
+5. Stereochemistry changes
+6. Property-specific optimizations
+Do not write code. Do not give any explanation. The candidates should be valid.The output molecules should be valid.
+Each output new candidate must start with <candidate> and end with </candidate> in SMILES format.Example one output: <candidate>c1ccccc1</candidate>

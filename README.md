@@ -93,7 +93,7 @@ logp: LogP is the logarithm of the partition coefficient, measuring the lipophil
   hydrophobicity of a molecule, indicating its solubility in fats versus water.Adding
   hydrophobic groups (e.g., alkyl chains or aromatic rings) increases LogP,while adding
   polar or hydrophilic groups (e.g., hydroxyl or carboxyl groups) decreases it.
-
+```
 
 # 📊 Evaluator Guide
 

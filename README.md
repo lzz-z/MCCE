@@ -101,3 +101,137 @@ logp: LogP is the logarithm of the partition coefficient, measuring the lipophil
   polar or hydrophilic groups (e.g., hydroxyl or carboxyl groups) decreases it.
 
 
+# 📊 Evaluator Guide
+
+In each specific problem directory under `problem/`, you need to create an `evaluator.py` file to define a custom evaluation logic. This file should contain a class named `RewardingSystem` that evaluates the quality of generated results.
+
+---
+
+## ✅ Required Structure
+
+The `evaluator.py` file **must** define the following structure:
+
+```python
+class RewardingSystem:
+    def __init__(self, config):
+        # Initialization method (config is passed in)
+        pass
+
+    def evaluate(self, items):
+        # Main evaluation function
+        pass
+```
+
+---
+
+## 🧩 Input and Output of `evaluate`
+
+* **Input**: `items` is a list of Item objects (algorithm.base.Item). Each dictionary represents a result item to evaluate.
+* **Each item must be given a dict containing the following keys**:
+
+| Key                   | Description                                                                                                |
+|----------------------|------------------------------------------------------------------------------------------------------------|
+| `original_results`    | The raw metrics (e.g., `{'sa': 2.22, 'qed': 0.68}`). These are used for logging or visualization.          |
+| `transformed_results` | The normalized and minimized version of the original results. Values must be in the `[0, 1]` range.        |
+| `overall_score`       | A scalar value representing the overall quality of the item. Higher is better. This is fully customizable. |
+**Then simply use item.assign_results(results) to assign the result to each item**
+**No output needed to be returned**
+---
+
+## 🔄 About `transformed_results`
+
+You need to manually normalize and transform the original results so they are suitable for multi-objective optimization. The general rules are:
+
+1. **Normalization**: All values must be in the range `[0, 1]`.
+2. **Minimization Format**: The optimization system assumes all objectives are "to minimize". You should convert maximization metrics accordingly.
+
+### Example Transformation
+
+Assume you are working with:
+
+- **QED** (Quantitative Estimate of Drug-likeness): originally a maximization metric in `[0, 1]`  
+  → Transformation: `1 - qed`
+- **SA** (Synthetic Accessibility): originally a minimization metric, roughly in `[0, 10]`  
+  → Transformation: `sa / 10`
+
+```python
+transformed_results = {
+    'sa': original['sa'] / 10,
+    'qed': 1 - original['qed']
+}
+```
+
+---
+
+## 📈 Defining `overall_score`
+
+You must define a scalar score (`overall_score`) for each item. This value will be used for sorting and comparison — **the higher, the better**.
+
+### Equal-weight example:
+
+```python
+overall_score = len(transformed_results) - np.sum(list(transformed_results.values()))
+```
+
+### Custom weighted example:
+
+```python
+weights = {'qed': 0.7, 'sa': 0.3}
+overall_score = 1 - (weights['qed'] * transformed_results['qed'] +
+                     weights['sa'] * transformed_results['sa'])
+```
+
+You are free to implement any custom scoring logic as long as the final result is a single float value.
+
+---
+
+## 📁 File Placement
+
+Your `evaluator.py` file should be placed in the corresponding problem directory, example:
+
+```
+problem/
+└── molecules/
+    ├── evaluator.py  ✅
+    └── config.yaml
+```
+
+---
+
+## 🧪 Sample `evaluator.py` Template
+
+```python
+import numpy as np
+
+class RewardingSystem:
+    def __init__(self, config):
+        self.config = config
+
+    def evaluate(self, items):
+        for item in items:
+            original = item['original_results']
+
+            # Transform metrics
+            transformed = {
+                'sa': original['sa'] / 10,
+                'qed': 1 - original['qed']
+            }
+
+            # Save transformed results
+            item['transformed_results'] = transformed
+
+            # Compute overall_score (equal-weight example)
+            item['overall_score'] = len(transformed) - np.sum(list(transformed.values()))
+            item.assign_results(results)
+```
+
+---
+
+## ❗Notes
+
+- `evaluate()` modifies each `item` in-place.
+- `transformed_results` must include normalized and minimization-converted values.
+- `overall_score` must be a scalar float, with **higher values indicating better results**.
+- You are free to extend the evaluation logic as needed per problem.
+
+---

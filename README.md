@@ -128,6 +128,7 @@ class RewardingSystem:
 | `original_results`    | The raw metrics (e.g., `{'sa': 2.22, 'qed': 0.68}`). These are used for logging or visualization.          |
 | `transformed_results` | The normalized and minimized version of the original results. Values must be in the `[0, 1]` range.        |
 | `overall_score`       | A scalar value representing the overall quality of the item. Higher is better. This is fully customizable. |
+
 **Then simply use item.assign_results(results) to assign the result to each item**
 **No output needed to be returned**
 ---

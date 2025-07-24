@@ -4,7 +4,6 @@ save_dir: "/home/hp/src/mollm_results/coevol"
 save_suffix: "0722_newcode"
 initial_pop: "random1" # best100, worst100, random1 ~ 5
 
-material: False
 model:
   name: zgca,gemini-2.5-flash-nothinking  #,gemini-2.5-flash-nothinking     gpt-4-0125-preview  gpt-4o-2024-05-13
   # name2: zgca,gpt-4o-2024-05-13
@@ -13,7 +12,7 @@ model:
   crossover_prob: 0.8
   mutation_prob: 0.2 
   explore_prob: 0. 
-use_au: True
+use_au: True  # If True, this will use au model, set to false if you only want to use one LLM
 
 goals: [sa,drd2,qed,gsk3b,jnk3]
 optimization_direction: [min,min,max,min,max]
@@ -24,7 +23,6 @@ evalutor_path: problem.molecules.evaluator
 optimization: 
   pop_size: 50
   eval_budget: 5000
-  ngen: 5
 
 
 init_datset: ZINC

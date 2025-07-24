@@ -19,8 +19,7 @@ from eval import get_evaluation
 import time
 from model.util import *
 from algorithm import PromptTemplate
-from eval import judge
-
+import importlib
 import pickle
 from model.LLM import LLM
 from genetic_gfn.multi_objective.genetic_gfn.run import Genetic_GFN_Optimizer
@@ -77,12 +76,11 @@ class MOO:
         self.time_step = 0
 
     def generate_initial_population(self, n):
-        with open('/home/hp/src/MOLLM/data/data_goal5.json','r') as f:
-            data = json.load(f)
-        data_type = self.config.get('initial_pop')
-        print(f'loading {data_type} as initial pop!')
-        smiles = data[data_type]
-        return [self.item_factory.create(i) for i in smiles]
+        module_path = self.config.get('evalutor_path')  # e.g., "molecules"
+        module = importlib.import_module(module_path)
+        _generate = getattr(module, "generate_initial_population")
+        strings = _generate()
+        return [self.item_factory.create(i) for i in strings]
 
     def mutation(self, parent_list):
         prompt = self.prompt_generator.get_prompt('mutation',parent_list,self.history_moles)
@@ -96,14 +94,24 @@ class MOO:
         new_smiles = extract_smiles_from_string(response)
         return [self.item_factory.create(smile) for smile in new_smiles],prompt,response
 
+    def evaluate(self,pops):
+        pops, log_dict = self.reward_system.evaluate(pops)
+        self.failed_num += log_dict['invalid_num']
+        self.reapted_num += log_dict['repeated_num']
+        pops = self.store_history_moles(pops)
+        return pops
+
     def store_history_moles(self,pops):
+        unique_pop = []
         for i in pops:
             if i.value not in self.history_moles:
                 self.history_moles.append(i.value)
                 self.mol_buffer.append([i, len(self.mol_buffer)+1])
+                unique_pop.append(i)
             else:
-                print('this place should not have repeated smiles')
-                assert False
+                self.repeat_num += 1
+        return unique_pop
+        
     def explore(self):
         pass 
 
@@ -133,7 +141,7 @@ class MOO:
         avg_top10 = np.mean([i.total for i in top10])
         avg_top100 = np.mean([i.total for i in top100_mols])
 
-        diversity_top100 = self.reward_system.all_evaluators['diversity']([i.value for i in top100_mols])
+        ### diversity_top100 = self.reward_system.all_evaluators['diversity']([i.value for i in top100_mols])
         scores = np.array([i.scores for i in top100_mols])
         volume = cal_hv(scores)
 
@@ -149,7 +157,7 @@ class MOO:
             new_score = avg_top100
             if new_score == self.old_score:
                 self.patience += 1
-                if self.patience >= 6:
+                if self.patience >= 10:
                     print('convergence criteria met, abort ...... ')
                     self.early_stopping = True
             else:
@@ -179,7 +187,6 @@ class MOO:
             'Uniqueness': uniqueness,
             'Validity': validity,
             'Training_step': self.time_step,
-            'all_generated': self.generated_num,
             'avg_top1': top10[0].total,
             'avg_top10': avg_top10,
             'avg_top100': avg_top100,
@@ -187,7 +194,7 @@ class MOO:
             'top10_auc': auc10,
             'top100_auc': auc100,
             'hypervolume': volume,
-            'div': diversity_top100,
+            ###'div': diversity_top100,
             'generated_num': self.generated_num
         })
 
@@ -200,21 +207,23 @@ class MOO:
 
         with open(json_path, 'w') as f:
             json.dump(results_dict, f, indent=4)
-
+        
         print(f'{buffer_type}: {len(self.history_moles)}/{self.budget} generated: {self.generated_num} | '
             f'mol_buffer: {len(mol_buffer)} | '
             f'Uniqueness: {uniqueness:.4f} | '
             f'Validity: {validity:.4f} | '
             f'llm_calls: {self.llm_calls} | '
             f'Training step: {self.time_step} | '
-            f'avg_top1: {top10[0].total:.4f} | '
-            f'avg_top10: {avg_top10:.4f} | '
-            f'avg_top100: {avg_top100:.4f} | '
+            f'avg_top1: {top10[0].total:.6f} | '
+            f'avg_top10: {avg_top10:.6f} | '
+            f'avg_top100: {avg_top100:.6f} | '
             f'top1_auc: {auc1:.4f} | '
             f'top10_auc: {auc10:.4f} | '
             f'top100_auc: {auc100:.4f} | '
             f'hv: {volume:.4f} | '
-            f'div: {diversity_top100:.4f}')
+            f'unique top 100:{len(np.unique([i.total for i in top100_mols]))}'
+            ###f'div: {diversity_top100:.4f}'
+            )
 
 
     def update_experience(self):
@@ -235,8 +244,7 @@ class MOO:
         self.history_experience.append(self.prompt_generator.experience) 
         print('length exp:',len(self.prompt_generator.experience))
 
-
-
+    
     def run(self):
         store_path = os.path.join(self.save_dir,'mols','_'.join(self.property_list) + '_' + self.config.get('save_suffix') + f'_{self.seed}' +'.pkl')
         if not os.path.exists(os.path.dirname(store_path)):
@@ -253,15 +261,18 @@ class MOO:
         start_time = time.time()
         
         #initialization 
-        population = self.generate_initial_population(n=self.pop_size)
-        self.store_history_moles(population)
-        self.reward_system.evaluate(population)
-        self.log_results()
+        if self.config.get('resume'):
+            population,init_pops = self.load_ckpt(store_path)
+        else:
+            population = self.generate_initial_population(n=self.pop_size)
+            population = self.evaluate(population) # including removing invalid and repeated candidates
+            self.log_results()
+            init_pops = copy.deepcopy(population)
         self.prompt_generator = self.prompt_module(self.config)
-        init_pops = copy.deepcopy(population)
+        
 
         self.num_gen = 0
-       
+        
         while True:
             offspring_times = max(min(self.pop_size //2, (self.budget -len(self.mol_buffer)) //2),1)
             offspring = self.generate_offspring(population, offspring_times)
@@ -292,8 +303,9 @@ class MOO:
         print(f'=======> total running time { (time.time()-start_time)/3600 :.2f} hours <=======')
         
         return init_pops,population  # 计算效率
-
+    '''
     def sanitize(self,tmp_offspring,record=True):
+        return tmp_offspring ###
         offspring = []
         smiles_this_gen = []
         for child in tmp_offspring:
@@ -313,6 +325,7 @@ class MOO:
                     smiles_this_gen.append(child.value)
                     offspring.append(child)
         return offspring
+    '''
     
     def record(self, tmp_offspring: list, buffer_type: str) -> list:
         """
@@ -409,13 +422,13 @@ class MOO:
             self.save_log_mols(au_smiles,buffer_type='au')
             tmp_offspring.extend(au_smiles)
             
+        #offspring = self.sanitize(tmp_offspring,record=True)
+        offspring = tmp_offspring
         
-        offspring = self.sanitize(tmp_offspring,record=True)
         if len(offspring) == 0:
             return []
 
-        self.reward_system.evaluate(offspring)
-        self.store_history_moles(offspring)
+        offspring = self.evaluate(offspring)
         self.history.push(prompts,children,responses) 
         return offspring
 
@@ -428,8 +441,7 @@ class MOO:
         - buffer_type (str): Indicates which buffer ('main' or 'au') to update.
         """
         self.time_step += 1
-        #mols = self.sanitize(mols,record=False)
-        self.reward_system.evaluate(mols)
+        mols,_ = self.reward_system.evaluate(mols)
         if buffer_type=='main':
             mol_buffer = self.main_mol_buffer
             self.au_model.train_on_smiles([i.value for i in mols],[i.total for i in mols],loop=4,time_step=self.time_step,mol_buffer=mol_buffer)
@@ -471,8 +483,10 @@ class MOO:
 
     def select_next_population(self, population, offspring, pop_size):
         combined_population = offspring + population 
-        #if len(self.property_list)>1:
-        return nsga2_so_selection(combined_population, pop_size)
+        if len(self.property_list)>1:
+            return nsga2_so_selection(combined_population, pop_size)
+        else:
+            return so_selection(combined_population,pop_size)
     
 
     def generate_offspring_au(self, population, offspring_times=20):
@@ -488,6 +502,28 @@ class MOO:
             tmp_offspring.extend(child_pair)
         return tmp_offspring
     
+    def load_ckpt(self,store_path):
+        print('resume training')
+        save_dir = os.path.join(self.save_dir, "results")
+        json_path = os.path.join(save_dir, '_'.join(self.property_list) + '_' +
+                            self.config.get('save_suffix') + f'_{self.seed}.json')
+        with open(store_path,'rb') as f:
+            ckpt = pickle.load(f)
+        with open(json_path,'rb') as f:
+            result_ckpt = json.load(f)
+        self.mol_buffer = ckpt['all_mols']
+        population = self.select_next_population([i[0] for i in self.mol_buffer], [], self.pop_size) 
+        init_pops = ckpt['init_pops']
+        self.history = ckpt['history']
+        
+        self.history_moles = [i[0].value for i in self.mol_buffer]
+        self.results_dict['results'] = ckpt['evaluation']
+        self.generated_num = result_ckpt['results'][-1]['generated_num']
+        self.llm_calls = result_ckpt['results'][-1]['llm_calls']
+        self.repeat_num = int((1-result_ckpt['results'][-1]['Uniqueness']) * self.generated_num)
+        self.failed_num = int((1-result_ckpt['results'][-1]['Validity']) * self.generated_num)
+        return population, init_pops
+
     
     
  

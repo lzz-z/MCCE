@@ -23,6 +23,7 @@ This repository contains the source code and scripts for the MOLLM project. The 
 
 ### Running the experiments
   - `python main.py molecules/goal5_gemini.yaml`: You need to define a config file to run, this is an example, you can use it as a template, the path is set to under the problem directory.
+  - To resume training, just set `resume: True` in your config file. 
 
 ### Description of Files and Directories
 
@@ -118,6 +119,10 @@ In each specific problem directory under `problem/`, you need to create an `eval
 The `evaluator.py` file **must** define the following structure:
 
 ```python
+def generate_initial_population():
+    # Arbitrary initial population, in strings form. The format should be consistent to the output format
+    return samples
+
 class RewardingSystem:
     def __init__(self, config):
         # Initialization method (config is passed in)
@@ -125,10 +130,13 @@ class RewardingSystem:
 
     def evaluate(self, items):
         # Main evaluation function
-        pass
+        return items, log_dict
 ```
 
 ---
+## Generate initial population
+
+You are free to define the initial population. Each candidate must be a string, and its format must be consistent with what your evaluator expects. It is assumed these strings can be parsed and evaluated by your `evaluate` method.
 
 ## 🧩 Input and Output of `evaluate`
 
@@ -142,8 +150,27 @@ class RewardingSystem:
 | `overall_score`       | A scalar value representing the overall quality of the item. Higher is better. This is fully customizable. |
 
 * **Then simply use item.assign_results(results) to assign the result to each item**
-* **No output needed to be returned**
+* **If you want to change the value of an item, just use `item.value=xxx`**
+### 🔸 Required Fields in `log_dict`
+
+The `evaluate` function must return a second output: a dictionary called `log_dict` for tracking evaluation statistics. The following fields are **required**:
+
+| Key            | Description                                                                 |
+|----------------|-----------------------------------------------------------------------------|
+| `invalid_num`  | Number of invalid candidates (e.g., failed parsing, wrong format, etc.)     |
+| `repeated_num` | Number of duplicate candidates in the current generation                    |
+
+If you do not compute these metrics in your task, simply return default values:
+
+```python
+log_dict = {
+    "invalid_num": 0,
+    "repeated_num": 0
+}
+```
+
 ---
+
 
 ## 🔄 About `transformed_results`
 
@@ -209,27 +236,38 @@ problem/
 
 ```python
 import numpy as np
-
 class RewardingSystem:
     def __init__(self, config):
         self.config = config
 
     def evaluate(self, items):
+        invalid_num = 0
+        repeated_num = 0
+
         for item in items:
             original = item['original_results']
 
-            # Transform metrics
             transformed = {
                 'sa': original['sa'] / 10,
                 'qed': 1 - original['qed']
             }
 
-            # Save transformed results
-            item['transformed_results'] = transformed
+            overall_score = len(transformed) - np.sum(list(transformed.values()))
 
-            # Compute overall_score (equal-weight example)
-            item['overall_score'] = len(transformed) - np.sum(list(transformed.values()))
+            results = {
+                'original_results': original,
+                'transformed_results': transformed,
+                'overall_score': overall_score
+            }
+
             item.assign_results(results)
+
+        log_dict = {
+            'invalid_num': invalid_num,
+            'repeated_num': repeated_num
+        }
+
+        return items, log_dict
 ```
 
 ---

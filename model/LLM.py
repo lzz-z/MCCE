@@ -29,6 +29,7 @@ class LLM:
         base_url = "http://35.220.164.252:3888/v1/chat/completions"
         api_key = "sk-zIBA7uyzMr9cGy6VhCMNAZ5BLqp0MGG3lz7pfhY5qBHGW6CW"
         
+        
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}"  

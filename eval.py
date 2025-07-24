@@ -68,7 +68,7 @@ def get_evaluation(evaluate_metric, smiles):
 
 def extract_smiles_from_string(text):
     pattern = r"<candidate>(.*?)</candidate>"
-    smiles_list = re.findall(pattern, text)
+    smiles_list = re.findall(pattern, text,flags=re.DOTALL)
     return smiles_list
 
 def mean_sr(r,num_candiate=5):

@@ -4,6 +4,8 @@ url = 'http://cpu1.ms.wyue.site:8000/process'
 import time
 from functools import partial
 import numpy as np
+from rdkit import Chem, DataStructs
+from rdkit.Chem import AllChem
 from tqdm import tqdm
 def get_evaluation(evaluate_metric, smiles):
     data = {
@@ -15,6 +17,15 @@ def get_evaluation(evaluate_metric, smiles):
     return result
 
 from tdc import Oracle, Evaluator
+
+def generate_initial_population():
+    with open('/home/hp/src/MOLLM/data/data_goal5.json','r') as f:
+        data = json.load(f)
+    data_type = self.config.get('initial_pop')
+    print(f'loading {data_type} as initial pop!')
+    smiles = data[data_type]
+    return smiles
+
 class RewardingSystem:
     def __init__(self,use_tqdm=False,chunk_size=20,config=None):
         tdc_func = ['GSK3B','JNK3','DRD2','SA',
@@ -54,8 +65,10 @@ class RewardingSystem:
         return np.concatenate(results)
     
     def evaluate(self,items):
+        items, failed_num,repeated_num = sanitize(items)
         original_results = {}
         transformed_results = {}
+        log_dict = {}
         # You should assign the evaluation scores for each item by each item, but you can evaluate all in once
         for obj in self.objs:
             original_results[obj] = self.get_reward(obj,[item.value for item in items])
@@ -69,6 +82,10 @@ class RewardingSystem:
                 overall_score -= results['transformed_results'][obj]
             results['overall_score'] = overall_score # this score cannot be ignore, it is the overall fitness
             item.assign_results(results)
+        log_dict['repeated_num'] = repeated_num
+        log_dict['failed_num'] = failed_num
+        return items,log_dict
+
     
     def transform_objectives(self,obj, values):
         values = self.normalize_objectives(obj,values)
@@ -91,10 +108,25 @@ class RewardingSystem:
         else:
             raise NotImplementedError(f'{obj} is not defined for optimizaion direction! Please define it in "optimization_direction" in your yaml config')
 
+def sanitize(tmp_offspring):
+    offspring = []
+    failed_num = 0
+    repeated_num = 0
+    smiles_this_gen = []
+    for child in tmp_offspring:
+        mol = Chem.MolFromSmiles(child.value) 
+        if mol is None: # check if valid
+            failed_num += 1
+        else:
+            child.value = Chem.MolToSmiles(mol,canonical=True)
+            # check if repeated
+            if child.value in smiles_this_gen:
+                repeat_num +=1
+            else:
+                smiles_this_gen.append(child.value)
+                offspring.append(child)
+    return offspring, failed_num,repeated_num
     
-from rdkit import Chem, DataStructs
-from rdkit.Chem import AllChem
-
 def morgan_similarity(items):
     results = [_morgan_similarity(i[0],i[1]) for i in items]
     return results

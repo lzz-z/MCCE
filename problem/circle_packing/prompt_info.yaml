@@ -1,0 +1,27 @@
+# Write a description for your problem
+description: This task is to propose better solution for circle_packing problem where 26 circles in a unit square.
+
+# This part is important, you should set your output format here, and probably give an simple example. The <candidate></candidate> is fixed.
+example_output: 'Each output new candidate must start with <candidate> and end with
+  </candidate> in SMILES format. Example one output: <candidate>centers = np.array([
+    [0.50, 0.50], [0.30, 0.50], ...
+  ])
+  radii = np.array([
+    0.12, 0.10, ...
+  ])</candidate>'
+
+# Optional mutation and crossover instrution, helpful for better operation, you should start with:"Example operations include: "
+mutation_instruction: 'Example operations include:
+  change the values of circle coordinates or radii
+  '
+crossover_instruction: 'Example operations include:
+  switch the values between parents for better candidate'
+
+# Optional, some extra requirements you would like to achieve
+other_requirements: ' The only requirements is just keep the centers inside the unit square. 
+  Largely change these values (coordinate, orders, and raddi) with your knowledge, significant deviations from the original values are encouraged.
+  and do not need to worry about validity becuase I will fix the overlap and out of boundary.'
+
+# The following part are the description of the objectives involved. It is simply consisted of a sentence describe the objective and [optional] normally 
+# what operation could cause a rise or drop. 
+radii: this objective is the sum of radii of circles. 

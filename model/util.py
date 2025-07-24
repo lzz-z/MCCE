@@ -6,7 +6,7 @@ import re
 
 def extract_smiles_from_string(text):
     pattern = r"<candidate>(.*?)</candidate>"
-    smiles_list = re.findall(pattern, text)
+    smiles_list = re.findall(pattern, text,flags=re.DOTALL)
     return smiles_list
 
 def split_list(lst, n):

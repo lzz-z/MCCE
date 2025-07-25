@@ -79,7 +79,7 @@ class MOO:
         module_path = self.config.get('evalutor_path')  # e.g., "molecules"
         module = importlib.import_module(module_path)
         _generate = getattr(module, "generate_initial_population")
-        strings = _generate()
+        strings = _generate(self.config,self.seed)
         return [self.item_factory.create(i) for i in strings]
 
     def mutation(self, parent_list):
@@ -155,7 +155,7 @@ class MOO:
         # Handle early stopping for default logging only
         if buffer_type == "default":
             new_score = avg_top100
-            if new_score == self.old_score:
+            if new_score - self.old_score < 3e-5: # 0.947810
                 self.patience += 1
                 if self.patience >= 6:
                     print('convergence criteria met, abort ...... ')
@@ -221,7 +221,7 @@ class MOO:
             f'top10_auc: {auc10:.4f} | '
             f'top100_auc: {auc100:.4f} | '
             f'hv: {volume:.4f} | '
-            f'unique top 100:{len(np.unique([i.total for i in top100_mols]))}'
+            f'unique top 100:{len(np.unique([i.value for i in top100_mols]))}'
             ###f'div: {diversity_top100:.4f}'
             )
 
@@ -393,9 +393,22 @@ class MOO:
         if parallel:
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 futures = [executor.submit(self.mating, parent_list=parent_list) for parent_list in parents]
-                results = [future.result() for future in futures]
-                children, prompts, responses = zip(*results) #[[item,item],[item,item]] # ['who are you value 1', 'who are you value 2'] # ['yes, 'no']
-                self.llm_calls += len(results)     
+                #results = [future.result() for future in futures]
+                #children, prompts, responses = zip(*results) #[[item,item],[item,item]] # ['who are you value 1', 'who are you value 2'] # ['yes, 'no']
+                #self.llm_calls += len(results)     
+                results = []
+                for future in futures:
+                    try:
+                        result = future.result(timeout=120)  # 最多等待 120 秒
+                        results.append(result)
+                    except concurrent.futures.TimeoutError:
+                        print("Warning: A task timed out after 180 seconds.")
+                        continue  # 或者 results.append(default_value)
+                if results:
+                    children, prompts, responses = zip(*results)
+                    self.llm_calls += len(results)
+                else:
+                    print("No results collected due to timeouts.")
         else:
             children,prompts,responses = [],[],[]
             for parent_list in tqdm(parents):

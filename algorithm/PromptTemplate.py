@@ -44,7 +44,7 @@ class Prompt:
         return self._compose_prompt(ind_list, experience, 'crossover')
 
     def _get_mutation_prompt(self, ind_list: List[Item], history_items: List[Item], experience: str) -> str:
-        return self._compose_prompt(ind_list[:1], experience, 'mutation')
+        return self._compose_prompt(ind_list, experience, 'mutation')
 
     def _get_exploration_prompt(self, history_items: List[Item]) -> str:
         top100 = sorted(history_items, key=lambda x: x.total, reverse=True)[:100]

@@ -4,8 +4,10 @@ import numpy as np
 from scipy.optimize import minimize
 import random
 
-def generate_initial_population(num_samples=50, n=26, random_seed=42):
-    np.random.seed(random_seed)
+def generate_initial_population(config,seed=42):
+    num_samples=50
+    n=26
+    np.random.seed(seed)
     samples = []
 
     for _ in range(num_samples):

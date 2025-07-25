@@ -119,8 +119,9 @@ In each specific problem directory under `problem/`, you need to create an `eval
 The `evaluator.py` file **must** define the following structure:
 
 ```python
-def generate_initial_population():
+def generate_initial_population(config,seed):
     # Arbitrary initial population, in strings form. The format should be consistent to the output format
+    # The config and seed will be passed, you can use it or not
     return samples
 
 class RewardingSystem:

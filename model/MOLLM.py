@@ -40,10 +40,15 @@ class ConfigLoader:
         return "\n".join(lines)
 
 class MOLLM:
-    def __init__(self, config='base.yaml',resume=False,eval=False,seed=42,objective=None):
+    def __init__(self, config='base.yaml',resume=False,eval=False,seed=42,objectives=None,directions=None):
         self.config = ConfigLoader(config)
-        if objective is not None:
-            self.config.config['goals'] = [objective]
+        print('goals, directs',self.config.get('goals'),self.config.get('optimization_direction'))
+        if objectives is not None:
+            print(f'objectives  {objectives} directions {directions}')
+            self.config.config['goals'] = objectives
+            assert directions is not None
+            self.config.config['optimization_direction'] = directions
+            print('goals, directs',self.config.get('goals'),self.config.get('optimization_direction'))
         self.property_list = self.config.get('goals')
         if not eval:
             module_path = self.config.get('evalutor_path')  # e.g., "molecules"

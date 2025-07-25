@@ -1,8 +1,9 @@
 exper_name: "7.16, with genetic_gfn as au model, 40 main + 32 + 8 au after oracle calls > 0, and ga inside gfn added"
 description: "32 gfn for main and au, use canonical=True"
-save_dir: "/home/hp/src/mollm_results/coevol"
-save_suffix: "0722_newcode"
-initial_pop: "random1" # best100, worst100, random1 ~ 5
+save_dir: "/home/hp/src/mollm_results/"
+save_suffix: "0722_pmo"
+
+resume: False
 
 model:
   name: zgca,gemini-2.5-flash-nothinking  #,gemini-2.5-flash-nothinking     gpt-4-0125-preview  gpt-4o-2024-05-13
@@ -12,7 +13,7 @@ model:
   crossover_prob: 0.8
   mutation_prob: 0.2 
   explore_prob: 0. 
-use_au: True  # If True, this will use au model, set to false if you only want to use one LLM
+use_au: False  # If True, this will use au model, set to false if you only want to use one LLM
 
 goals: [sa,drd2,qed,gsk3b,jnk3]
 optimization_direction: [min,min,max,min,max]
@@ -22,10 +23,7 @@ evalutor_path: problem.molecules.evaluator
 
 optimization: 
   pop_size: 50
-  eval_budget: 5000
-
-
-init_datset: ZINC
+  eval_budget: 10000
 
 
 

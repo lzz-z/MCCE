@@ -21,7 +21,7 @@ from tdc import Oracle, Evaluator
 def generate_initial_population():
     with open('/home/hp/src/MOLLM/data/data_goal5.json','r') as f:
         data = json.load(f)
-    data_type = self.config.get('initial_pop')
+    data_type = 'random1' # initial_pop: "random1" # best100, worst100, random1 ~ 5
     print(f'loading {data_type} as initial pop!')
     smiles = data[data_type]
     return smiles
@@ -83,7 +83,7 @@ class RewardingSystem:
             results['overall_score'] = overall_score # this score cannot be ignore, it is the overall fitness
             item.assign_results(results)
         log_dict['repeated_num'] = repeated_num
-        log_dict['failed_num'] = failed_num
+        log_dict['invalid_num'] = failed_num
         return items,log_dict
 
     

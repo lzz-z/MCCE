@@ -97,7 +97,7 @@ class MOO:
     def evaluate(self,pops):
         pops, log_dict = self.reward_system.evaluate(pops)
         self.failed_num += log_dict['invalid_num']
-        self.reapted_num += log_dict['repeated_num']
+        self.repeat_num += log_dict['repeated_num']
         pops = self.store_history_moles(pops)
         return pops
 
@@ -157,7 +157,7 @@ class MOO:
             new_score = avg_top100
             if new_score == self.old_score:
                 self.patience += 1
-                if self.patience >= 10:
+                if self.patience >= 6:
                     print('convergence criteria met, abort ...... ')
                     self.early_stopping = True
             else:
@@ -326,7 +326,7 @@ class MOO:
                     offspring.append(child)
         return offspring
     '''
-    
+
     def record(self, tmp_offspring: list, buffer_type: str) -> list:
         """
         Records valid and unique molecules from the given temporary offspring list.

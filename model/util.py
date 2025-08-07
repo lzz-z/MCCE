@@ -139,11 +139,18 @@ def top_auc(buffer, top_n, finish, freq_log, max_oracle_calls):
         sum += (max_oracle_calls - len(buffer)) * top_n_now
     return sum / max_oracle_calls
 
-
 def cal_hv(scores):
     ref_point = np.array([1.1]*len(scores[0]))
     hv = HV(ref_point=ref_point)
     nds = NonDominatedSorting().do(scores,only_non_dominated_front=True)
     scores = scores[nds]
     return hv(scores)
+
+def cal_fusion_hv(scores):
+    ref_point = np.array([1.0,20.0])
+    hv = HV(ref_point=ref_point)
+    nds = NonDominatedSorting().do(scores,only_non_dominated_front=True)
+    scores = scores[nds]
+    return hv(scores)
+
 

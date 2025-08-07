@@ -11,8 +11,6 @@ from functools import partial
 import os
 from algorithm.base import ItemFactory,HistoryBuffer
 from openai import AzureOpenAI
-from tdc.generation import MolGen
-from rdkit.Chem import AllChem
 from rdkit import Chem
 import json
 from eval import get_evaluation
@@ -22,8 +20,7 @@ from algorithm import PromptTemplate
 import importlib
 import pickle
 from model.LLM import LLM
-from genetic_gfn.multi_objective.genetic_gfn.run import Genetic_GFN_Optimizer
-from genetic_gfn.multi_objective.run import prepare_optimization_inputs
+
 
 def set_seed(seed):
     random.seed(seed)
@@ -80,16 +77,24 @@ class MOO:
         module = importlib.import_module(module_path)
         _generate = getattr(module, "generate_initial_population")
         strings = _generate(self.config,self.seed)
-        return [self.item_factory.create(i) for i in strings]
+        if isinstance(strings[0],str):
+            return [self.item_factory.create(i) for i in strings]
+        else:
+            self.store_history_moles(strings)
+            return strings
 
     def mutation(self, parent_list):
         prompt = self.prompt_generator.get_prompt('mutation',parent_list,self.history_moles)
+        #print('mutation prompt:',prompt)
+        #assert False
         response = self.llm.chat(prompt)
         new_smiles = extract_smiles_from_string(response)
         return [self.item_factory.create(smile) for smile in new_smiles],prompt,response
 
     def crossover(self, parent_list):
         prompt = self.prompt_generator.get_prompt('crossover',parent_list,self.history_moles)
+        #print('crossover prompt:',prompt)
+        #assert False
         response = self.llm.chat(prompt)
         new_smiles = extract_smiles_from_string(response)
         return [self.item_factory.create(smile) for smile in new_smiles],prompt,response
@@ -142,8 +147,12 @@ class MOO:
         avg_top100 = np.mean([i.total for i in top100_mols])
 
         ### diversity_top100 = self.reward_system.all_evaluators['diversity']([i.value for i in top100_mols])
-        scores = np.array([i.scores for i in top100_mols])
-        volume = cal_hv(scores)
+        
+        ### scores = np.array([i.scores for i in top100_mols])
+        ### volume = cal_hv(scores) ###
+        top100_mols = [i for i in top100_mols if i.constraints['feasibility']<0.01]
+        scores = np.array([[-i.property['l_delta_b'],i.property['aspect_ratio']] for i in top100_mols])
+        volume = cal_fusion_hv(scores)
 
         if buffer_type == "default":
             uniqueness = 1 - self.repeat_num / (self.generated_num + 1e-6)
@@ -155,7 +164,7 @@ class MOO:
         # Handle early stopping for default logging only
         if buffer_type == "default":
             new_score = avg_top100
-            if new_score - self.old_score < 3e-5: # 0.947810
+            if new_score - self.old_score < 1e-3 and self.old_score>0.05: # 0.947810
                 self.patience += 1
                 if self.patience >= 6:
                     print('convergence criteria met, abort ...... ')
@@ -251,9 +260,13 @@ class MOO:
             os.makedirs(os.path.dirname(store_path), exist_ok=True)
             
         ''' initialize genetic gfn model'''
-        args, config_default, oracle = prepare_optimization_inputs()
-        self.au_model = Genetic_GFN_Optimizer(args=args)
-        self.au_model.setup_model(oracle, config_default)
+        
+        if self.use_au:
+            from genetic_gfn.multi_objective.genetic_gfn.run import Genetic_GFN_Optimizer
+            from genetic_gfn.multi_objective.run import prepare_optimization_inputs
+            args, config_default, oracle = prepare_optimization_inputs()
+            self.au_model = Genetic_GFN_Optimizer(args=args)
+            self.au_model.setup_model(oracle, config_default)
 
         """High level logic"""
         print('exper_name',self.config.get('exper_name'))
@@ -265,12 +278,12 @@ class MOO:
             population,init_pops = self.load_ckpt(store_path)
         else:
             population = self.generate_initial_population(n=self.pop_size)
-            population = self.evaluate(population) # including removing invalid and repeated candidates
+            if population[0].total is None:
+                population = self.evaluate(population) # including removing invalid and repeated candidates
             self.log_results()
             init_pops = copy.deepcopy(population)
         self.prompt_generator = self.prompt_module(self.config)
         
-
         self.num_gen = 0
         
         while True:

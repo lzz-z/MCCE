@@ -10,7 +10,7 @@ import json
 from rdkit.Chem import Draw
 # import tdc
 # from tdc.generation import MolGen
-import wandb
+#import wandb
 # from main.utils.chem import *
 from botorch.utils.multi_objective.hypervolume import Hypervolume
 from pymoo.indicators.hv import HV

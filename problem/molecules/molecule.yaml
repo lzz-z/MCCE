@@ -17,8 +17,7 @@ mutation_instruction: 'Example operations include:
 crossover_instruction: ''
 
 # Optional, some extra requirements you would like to achieve
-other_requirements: The output molecules should be valid.
-
+other_requirements: The output molecules should be valid. 
 # The following part are the description of the objectives involved. It is simply consisted of a sentence describe the objective and [optional] normally 
 # what operation could cause a rise or drop. 
 qed: QED (Quantitative Estimate of Drug-likeness) is a measure that quantifieshow
@@ -56,11 +55,9 @@ drd2: Dopamine receptor D2 (DRD2) is a receptor involved in the modulation of ne
   groups like hydroxyl or halogen atoms to aromatic rings can enhance binding affinity
   to DRD2. Removing aromaticity or introducing bulky groups near the binding sites
   often decreases DRD2 activity.
-gsk3b: Glycogen synthase kinase-3 beta (GSK3β) is an enzyme involved in cellular processes
-  like metabolism and apoptosis, and is a therapeutic target for cancer and neurological
-  diseases.Adding polar groups, such as hydroxyls, can improve hydrogen bonding with
-  GSK3β's active site.Introducing steric hindrance or highly hydrophobic regions can
-  reduce interactions with GSK3β.
+gsk3b: Glycogen synthase kinase 3 beta, also known as GSK3β, is an enzyme that in humans is 
+  encoded by the GSK3β gene. Abnormal regulation and expression of GSK3β is associated with an
+   increased susceptibility towards bipolar disorder. The oracle is a random forest classifer using ECFP6 fingerprints
 jnk3: c-Jun N-terminal kinase 3 (JNK3) is a kinase involved in stress signaling and
   is targeted for neuroprotection in diseases like Alzheimer's.Introducing small polar
   or electronegative groups can enhance binding affinity to JNK3.Removing polar functional
@@ -119,58 +116,63 @@ isomers_c9h10n2o2pf2cl: isomers_c9h10n2o2pf2cl  focuses on generating isomers of
   modifications must explore valid bond arrangements and stereoisomers within strict
   atomic constraints. Introducing or deleting atoms or violating bonding rules lowers
   the score.
-median1: median1 is a benchmark combines five rediscovery tasks (troglitazone, thiothixene,
-  albuterol_similarity, mestranol_similarity, and isomers_c7h8n2o2) and reports the
-  median performance across them. The objective is to assess general capability in
-  molecule rediscovery and similarity matching. Each task involves optimizing for
-  high structural similarity (usually Tanimoto similarity) to the target compound
-  while maintaining chemical validity and diversity. No single objective is explicitly
-  defined; rather, the test implicitly requires balance across structure generation,
-  memorization, and diversity.
-median2: A harder version of median1, this benchmark includes more complex tasks such
-  as fexofenadine_mpo, scaffold_hop, and zaleplon_mpo. These involve multiple competing
-  properties like drug-likeness, synthetic accessibility, and scaffold innovation.
-  The goal is to evaluate model robustness across varied, real-world challenges, combining
-  rediscovery, optimization, and scaffold-level creativity.
-osimertinib_mpo: osimertinib_mpo measures a molecule's performance based on multi-parameter
-  optimization (MPO) relative to osimertinib, an EGFR inhibitor. Improving it requires
-  balancing properties like potency, lipophilicity, molecular weight, and synthetic
-  accessibility similar to osimertinib. Overly modifying physicochemical properties,
-  such as adding too many polar groups or large rings, will reduce the objective score.
-fexofenadine_mpo: 'fexofenadine_mpo This multi-parameter optimization task is based
-  on Fexofenadine, an antihistamine. The objectives include: QED, logP, TPSA, SA,
-  The model must find compounds balancing all these properties, not just maximize
-  one.'
-ranolazine_mpo: ranolazine_mpo assesses how well a molecule matches the drug-like
-  profile of ranolazine, an antianginal agent. Keeping moderate size and balancing
-  aromatic and polar groups helps improve it. Adding bulky or highly hydrophobic groups
-  tends to lower the score.
-perindopril_mpo: perindopril_mpo evaluates similarity to perindopril, an ACE inhibitor,
-  based on multiple drug-like properties. Including polar side chains and maintaining
-  flexibility aids the objective. Adding rigid rings or highly lipophilic features
-  lowers the score.
-amlodipine_mpo: 'amlodipine_mpo Modeled after Amlodipine, a calcium channel blocker,
-  this task focuses on: QED,logP,HBA/HBD,SA,The goal is to produce compounds that
-  remain realistic drug candidates while structurally diverging from Amlodipine.'
-sitagliptin_mpo: 'sitagliptin_mpo Inspired by Sitagliptin, a diabetes medication,
-  this task involves optimizing: QED, logP, TPSA, Number of Rotatable Bonds, SA The
-  challenge is to generate potent molecules with realistic pharmacokinetic profiles
-  and limited synthetic complexity.'
-zaleplon_mpo: 'zaleplon_mpo Based on Zaleplon, a sedative-hypnotic, this task combines:
-  QED, logP, TPSA, SA, Toxicophore avoidance: Molecules containing certain known toxic
-  substructures are penalized. This simulates a real-world scenario where the model
-  must generate safe, effective, and synthesizable analogs.'
-valsartan_smarts: 'valsartan_smarts his task is centered on the antihypertensive drug
-  Valsartan. The objective is to: Generate molecules containing specific substructures
-  defined by SMARTS patterns derived from Valsartan. Optimize for QED to maintain
-  drug-likeness. Satisfy logP and SA thresholds. This tests the model''s ability to
-  preserve key pharmacophores while innovating around them to generate viable analogs.'
-deco_hop: 'deco_hop Scaffold decoration hopping: encourages the generation of molecules
-  with the same core scaffold as the reference but new decorations (side chains).
-  Replacing peripheral groups while keeping the scaffold intact supports this objective.
-  Altering or breaking the core scaffold drastically will reduce the score.'
-scaffold_hop: scaffold_hop Requires replacing the scaffold of a known active molecule
-  while preserving key pharmacophoric features, testing innovation with constraint
-  retention. Replacing the core with a novel but functionally similar scaffold improves
-  the score. Retaining the same scaffold or losing essential pharmacophoric features
-  lowers the score.
+median1: Generate molecules that are simultaneously similar to camphor CC1(C2CCC1(C(=O)C2)C)C  
+  and menthol CC1CCC(C(C1)O)C(C)C  based on ECFC4 fingerprints, which represent molecular structures 
+  by capturing circular substructures around each atom (radius 2)
+median2: Design molecules similar to both tadalafil CN1CC(=O)N2[C@@H](C1=O)CC3=C([C@H]2C4=CC5=C(C=C4)OCO5)NC6=CC=CC=C36 and 
+  sildenafil CCCC1=NN(C2=C1N=C(NC2=O)C3=C(C=CC(=C3)S(=O)(=O)N4CCN(CC4)C)OCC)C  using ECFC6 fingerprints, which capture 
+  more extended substructures (radius 3), to identify structural overlaps with both target drugs.
+osimertinib_mpo: Ensure the similarity to osimertinib CN1C=C(C2=CC=CC=C21)C3=NC(=NC=C3)NC4=C(C=C(C(=C4)NC(=O)C=C)N(C)CCN(C)C)OC  
+  using FCFC4 fingerprint is greater than 0.8. FCFC4 is a feature-based circular fingerprint (radius 2) that captures functional 
+  group-level patterns. Ensure the similarity to osimertinib using ECFC6 fingerprint is smaller than 0.85. ECFC6 is an 
+  extended-connectivity fingerprint with radius 3, representing detailed local substructures. Ensure the TPSA (topological polar surface area) is greater than 100.
+  Ensure the logP (partition coefficient) is smaller than 1.
+fexofenadine_mpo: Ensure the similarity to fexofenadine CC(C)(C1=CC=C(C=C1)C(CCCN2CCC(CC2)C(C3=CC=CC=C3)(C4=CC=CC=C4)O)O)C(=O)O using AP fingerprint 
+  is greater than 0.8.
+  AP (Atom Pair) fingerprint captures pairwise atom relationships and distances, useful for overall molecular shape and functional group similarity.
+  Ensure the TPSA (topological polar surface area) is greater than 90.
+  Ensure the logP (partition coefficient) is smaller than 4.
+ranolazine_mpo: Ensure the similarity to ranolazine CC1=C(C(=CC=C1)C)NC(=O)CN2CCN(CC2)CC(COC3=CC=CC=C3OC)O using AP fingerprint is greater than 0.7.
+  AP (Atom Pair) fingerprint encodes distances between atom pairs, useful for shape and feature similarity.
+  Ensure the value of logP is greater than 7.
+  Ensure the value of TPSA (topological polar surface area) is greater than 95.
+perindopril_mpo: Ensure the molecule is structurally similar to perindopril CCC[C@@H](C(=O)OCC)N[C@@H](C)C(=O)N1[C@H]2CCCC[C@H]2C[C@H]1C(=O)O
+  based on ECFC4 fingerprint.
+  ECFC4 is an extended-connectivity fingerprint with radius 2, capturing local substructures around atoms to assess molecular similarity.
+  Ensure the number of aromatic rings is close to 2.
+amlodipine_mpo: Ensure the molecule is structurally similar to amlodipine CCOC(=O)C1=C(NC(=C(C1C2=CC=CC=C2Cl)C(=O)OC)C)COCCN based on ECFC4 fingerprint.
+  ECFC4 is an extended-connectivity fingerprint with radius 2, capturing circular atom environments to compare molecular structures.
+  Ensure the total number of rings is close to 3.
+sitagliptin_mpo: Ensure the similarity to sitagliptin C1CN2C(=NN=C2C(F)(F)F)CN1C(=O)C[C@@H](CC3=CC(=C(C=C3F)F)F)N based on ECFC4 fingerprint is close to 0.
+  ECFC4 is an extended-connectivity fingerprint with radius 2. In this case, the goal is to generate molecules that are structurally dissimilar to sitagliptin.
+  Ensure the value of logP is close to 2.0165.
+  Ensure the value of TPSA (topological polar surface area) is close to 77.04.
+  Ensure the molecule matches the molecular formula C16H15F6N5O, meaning
+  The number of carbon (C) atoms is close to 16.
+  The number of hydrogen (H) atoms is close to 15.
+  The number of fluorine (F) atoms is close to 6.
+  The number of nitrogen (N) atoms is close to 5.
+  The number of oxygen (O) atoms is close to 1.
+  The total number of atoms is also close to the total in this formula.
+zaleplon_mpo: Ensure the molecule is structurally similar to zaleplon CCN(C1=CC=CC(=C1)C2=CC=NC3=C(C=NN23)C#N)C(=O)C based on ECFC4 fingerprint.
+  ECFC4 is an extended-connectivity fingerprint with radius 2, capturing atom-centered local substructures for structural comparison.
+  Ensure the molecule matches the molecular formula C19H17N3O2, meaning
+  The number of each element (C, H, N, O) should be close to that in the target formula.
+  The total number of atoms should also be close to that of the target.
+  These are scored using Gaussian functions centered at the target values (with standard deviation 1.0 for each element count, and 2.0 for total atom count), encouraging molecules that are true isomers of zaleplon.
+valsartan_smarts: 'The valsartan SMARTS benchmark targets molecules containing a SMARTS pattern related to valsartan while being
+  characterized by physicochemical properties corresponding to
+  the sitagliptin C1CN2C(=NN=C2C(F)(F)F)CN1C(=O)C[C@@H](CC3=CC(=C(C=C3F)F)F)N.
+  Generate molecules that contain the pharmacophore [#7]-c1n[c;h1]nc2[c;h1]c(-[#8])[c;h0][c;h1]c12, 
+  Ensure logP is close to 2.0165.
+  Ensure TPSA is close to 77.04.
+  Ensure Bertz index is close to 896.38.'
+deco_hop: 'Generate molecules that are highly similar (Tanimoto similarity ≥ 0.85) to the reference 
+  molecule CCCOc1cc2ncnc(Nc3ccc4ncsc4c3)c2cc1S(=O)(=O)C(C)(C)C, while containing the substructure 
+  [#7]-c1n[c;h1]nc2[c;h1]c(-[#8])[c;h0][c;h1]c12 and excluding both [#7]-c1ccc2ncsc2c1 and CS([#6])(=O)=O.'
+scaffold_hop: Ensure the molecule does not contain the SMARTS substructure [#7]-c1n[c;h1]nc2[c;h1]c(-[#8])[c;h0][c;h1]c12.
+  Ensure the molecule does contain the SMARTS substructure [#6]-[#6]-[#6]-[#8]-[#6]~[#6]~[#6]~[#6]~[#6]-[#7]-c1ccc2ncsc2c1.
+  Ensure the similarity to the reference molecule (CCCOc1cc2ncnc(Nc3ccc4ncsc4c3)c2cc1S(=O)(=O)C(C)(C)C) using PHCO fingerprint 
+  is greater than 0.75. PHCO is a pharmacophore-based fingerprint that captures key functional and spatial features important for biological activity.
+
+

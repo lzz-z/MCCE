@@ -6,7 +6,7 @@ save_suffix: "0722_pmo"
 resume: False
 
 model:
-  name: zgca,gemini-2.5-flash-nothinking  #,gemini-2.5-flash-nothinking     gpt-4-0125-preview  gpt-4o-2024-05-13
+  name: zgca,gemini-2.5-flash-nothinking      #  gemini-2.5-flash-nothinking  #,gemini-2.5-flash-nothinking     gpt-4-0125-preview  gpt-4o-2024-05-13
   # name2: zgca,gpt-4o-2024-05-13
   prompt_module: Prompt
   experience_prob: 0.5

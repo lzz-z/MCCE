@@ -34,8 +34,8 @@ class RewardingSystem:
                     'Aripiprazole_Similarity','Median1','Median2',
                     'Isomers_C7H8N2O2','Isomers_C9H10N2O2PF2CL',
                     'Osimertinib_MPO','Fexofenadine_MPO','Ranolazine_MPO',
-                    'Perindobjril_MPO','Amlodipine_MPO','Sitagliptin_MPO',
-                    'Zaleplon_MPO','Valsartan_SMARTS','scaffold_hobj','deco_hobj']
+                    'Perindopril_MPO','Amlodipine_MPO','Sitagliptin_MPO',
+                    'Zaleplon_MPO','Valsartan_SMARTS','scaffold_hop','deco_hop']
         
         self.config = config
         self.objs = config.get('goals')

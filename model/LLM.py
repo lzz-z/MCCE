@@ -11,7 +11,7 @@ def DefaultAzureCredential():
     pass
 def get_bearer_token_provider():
     pass
-import google.generativeai as genai
+# import google.generativeai as genai
 class LLM:
     def __init__(self,model='chatgpt'):
         

@@ -17,11 +17,26 @@ class Item:
         self.total = None
         self.scores = None
         self.property = None
+        self.constraints = None
 
     def assign_results(self,results:Dict):
         self.property = results['original_results']
         self.scores = [results['transformed_results'][obj] for obj in self.property_list]
         self.total = results['overall_score']
+        if 'constraint_results' in results:
+            self.constraints = results['constraint_results']
+    
+    def check_keys(self, results: Dict):
+        allowed_keys = {
+            'original_results',
+            'transformed_results',
+            'overall_score',
+            'constraint_results',  # optional
+        }
+        for key in results:
+            if key not in allowed_keys:
+                raise ValueError(f"Key '{key}' not implemented in assign_results. Only keys {allowed_keys} are allowed")
+
 
 class ItemFactory:
     def __init__(self, property_list: List[str]) -> None:

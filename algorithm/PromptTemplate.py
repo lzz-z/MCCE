@@ -75,29 +75,38 @@ class Prompt:
 
     def _make_history_prompt(self, ind_list: List[Item], experience: bool = False) -> str:
         header = "" if experience else (
-            "I have some candidates with their objective values. The total score is the integration of all property values; a higher total score means a better candidate.\n")
-        entries = [
-            f"<candidate>{ind.value}</candidate>, its property values are: " +
-            ", ".join([f"{prop}:{score:.4f}" for prop, score in ind.property.items()]) +
-            f", total: {ind.total:.4f}\n"
-            for ind in ind_list
-        ]
+            "I have some candidates with their objective values. The total score is the integration of all property values; a higher total score means a better candidate.\n"
+            "If the total score of the parent candidates is 0 or very low, you can discard them and repropose with your knowledge.")
+
+        entries = []
+        for ind in ind_list:
+            entry = f"<candidate>{ind.value}</candidate>, its property values are: " + \
+                    ", ".join([f"{prop}:{score:.4f}" for prop, score in ind.property.items()]) + \
+                    f", total: {ind.total:.4f}"
+
+            # 如果有 constraints，添加说明
+            if ind.constraints is not None:
+                constraint_str = ", ".join([f"{k}:{v:.5f}" for k, v in ind.constraints.items()])
+                entry += f", constraint values are: {constraint_str}"
+            entries.append(entry + "\n")
+
         return header + ''.join(entries)
 
+
     def _make_instruction_prompt(self, oper_type: str) -> str:
-        common_tail = ("Do not write code. Do not give any explanation."
-                       + self.info['other_requirements'] + "\n" 
-                       + self.info['example_output'] + "\n" )
+        common_tail = (self.info['other_requirements'] + "\n" 
+                       + self.info['example_output'] + "\n" +
+                        "Do not write code. Do not give any explanation." )
 
         if oper_type == 'mutation':
             return (
                 "Generate 2 new better candidates through mutation, ensuring they are different from all points provided above and not dominated by any of them.\n"
-                + self.info['mutation_instruction'] + common_tail)
+                + self.info['mutation_instruction'] + '\n' + common_tail)
         elif oper_type == 'crossover':
             return (
                 "Give me 2 new better candidates that are different from all points above and not dominated by them.\n"
                 "Use crossover and your knowledge to create better candidates.\n"
-                + self.info['crossover_instruction'] + common_tail)
+                + self.info['crossover_instruction'] + '\n' + common_tail)
         elif oper_type == 'explore':
             return (
                 "Confidently propose two novel and better candidates different from the given ones, leveraging your expertise.\n" + common_tail)

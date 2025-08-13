@@ -28,6 +28,9 @@ class Prompt:
         self.experience_prob = config.get('model.experience_prob')
         with open(config.get("prompt_info_path"), "r") as yaml_file:
             self.info = yaml.safe_load(yaml_file)
+            if self.config.get('n_circles',default=False):
+                n_circles = self.config.get('n_circles')
+                self.info['description'] = self.info['description'].replace('32 circles',f'{n_circles} circles') 
 
     def get_prompt(self, prompt_type: str, ind_list: List[Item], history_items: List[Item]) -> str:
         experience = self.experience if self.experience and np.random.random() < self.experience_prob else ""

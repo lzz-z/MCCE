@@ -1,8 +1,8 @@
-exper_name: "constellaration problem 3"
-description: "Multi-objective ideal-MHD stable QI stellarators"
+exper_name: "constellaration problem 2"
+description: " Single-objective simple-to-build QI stellarator"
 save_dir: "/home/hp/src/mollm_results/fusion"
-save_suffix: "0807"
-resume: True
+save_suffix: "0813_simple2build"
+resume: False
 
 model:
   name: zgca,gemini-2.5-flash-nothinking  #,gemini-2.5-flash-nothinking     gpt-4-0125-preview  gpt-4o-2024-05-13
@@ -14,11 +14,11 @@ model:
   explore_prob: 0. 
 use_au: False  # If True, this will use au model, set to false if you only want to use one LLM
 
-goals: [l_delta_b,aspect_ratio]
-optimization_direction: [max,min]
-prompt_info_path: /home/hp/src/MOLLM/problem/fusion/prompt_info.yaml   
+goals: [l_delta_b]
+optimization_direction: [min]
+prompt_info_path: /home/hp/src/MOLLM/problem/simple2build/prompt_info.yaml   
 ### Important ###
-evalutor_path: problem.fusion.evaluator
+evalutor_path: problem.simple2build.evaluator
 
 optimization: 
   pop_size: 50

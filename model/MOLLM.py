@@ -41,7 +41,10 @@ class ConfigLoader:
 
 class MOLLM:
     def __init__(self, config='base.yaml',resume=False,eval=False,seed=42,objectives=None,directions=None):
-        self.config = ConfigLoader(config)
+        if isinstance(config,str):
+            self.config = ConfigLoader(config)
+        else:
+            self.config = config
         print('goals, directs',self.config.get('goals'),self.config.get('optimization_direction'))
         if objectives is not None:
             print(f'objectives  {objectives} directions {directions}')
@@ -85,8 +88,8 @@ class MOLLM:
         self.final_pops.append(final_pops)
         self.init_pops.append(init_pops)
 
-        self.evaluate() # evaluate self.final_pops and self.init_pops
-        self.save_to_pkl(self.save_path)
+        #self.evaluate() # evaluate self.final_pops and self.init_pops
+        #self.save_to_pkl(self.save_path)
 
     def load_evaluate(self):
         self.load_from_pkl(self.save_path)

@@ -81,7 +81,7 @@ class RewardingSystem:
         valid_items = []
         log_dict = {}
         finished = 0
-        cpu_count = 6
+        cpu_count = 3
         print(f'start evaluating')
         with ProcessPoolExecutor(max_workers=cpu_count) as executor:
             futures = {executor.submit(_evaluate_one_static, item): item for item in items}
@@ -102,7 +102,7 @@ class RewardingSystem:
         return valid_items, log_dict
 
 
-def generate_initial_population(config,seed=42):
+def generate_initial_population(config,seed=42,n_sample=100):
     ds = datasets.load_dataset(
     "proxima-fusion/constellaration",
     split="train",
@@ -147,7 +147,7 @@ def generate_initial_population(config,seed=42):
         violations.append(problem._normalized_constraint_violations(metrics))
     df['feasibility'] = feasibilities
     df = df.sort_values('feasibility',ascending=True).reset_index(drop=True)
-    df= df[:300]
+    df= df[:n_sample]
     items = []
     for _,row in df.iterrows():
         results_dict = {}
@@ -169,11 +169,11 @@ def generate_initial_population(config,seed=42):
         items.append(item)
     with open('/home/hp/src/MOLLM/problem/fusion/best_items.pkl', 'rb') as f:
         loaded_items = pickle.load(f)
-    items.extend(loaded_items)
+    #items.extend(loaded_items)
    
     return items
 
-def get_database(config,seed=42):
+def get_database(config,seed=42,n_sample=100):
     ds = datasets.load_dataset(
     "proxima-fusion/constellaration",
     split="train",
@@ -218,7 +218,7 @@ def get_database(config,seed=42):
         violations.append(problem._normalized_constraint_violations(metrics))
     df['feasibility'] = feasibilities
     df = df.sort_values('feasibility',ascending=True).reset_index(drop=True)
-    df= df[:300]
+    df= df[:n_sample]
     items = []
     for _,row in df.iterrows():
         results_dict = {}
@@ -238,9 +238,6 @@ def get_database(config,seed=42):
         item = Item(convert2str(r_cos,z_sin),['l_delta_b','aspect_ratio'])
         item.assign_results(results_dict)
         items.append(item)
-    with open('/home/hp/src/MOLLM/problem/fusion/best_items.pkl', 'rb') as f:
-        loaded_items = pickle.load(f)
-    items.extend(loaded_items)
    
     return items
-    
+

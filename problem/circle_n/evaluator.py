@@ -1,12 +1,11 @@
-# EVOLVE-BLOCK-START
-"""Advanced circle packing for n=26 circles in a unit square"""
+
 import numpy as np
 from scipy.optimize import minimize
 import random
 
 def generate_initial_population(config,seed=42):
     num_samples=50
-    n=26
+    n=config.get('n_circles')
     np.random.seed(seed)
     samples = []
 
@@ -54,6 +53,7 @@ def convert2str(centers,radii):
 class RewardingSystem:
     def __init__(self,config=None):
         self.config = config
+        self.n = config.get('n_circles')
     
     def evaluate(self,items):
         valid_items = []
@@ -65,7 +65,7 @@ class RewardingSystem:
                 exec(item.value, {"np": np}, scope)
                 centers = scope["centers"]
                 radii = scope["radii"]
-                centers,radii,sum_radii = optimize_until_valid(centers,radii)
+                centers,radii,sum_radii = optimize_until_valid(centers,radii,self.n)
                 results_dict['original_results'] = {'radii':sum_radii}
                 results_dict['transformed_results'] = {'radii':1-sum_radii/5}
                 results_dict['overall_score'] = sum_radii
@@ -90,7 +90,7 @@ def has_overlap(centers, radii, tolerance=1e-8):
     return False
 
 
-def has_out_of_bounds(centers, radii, eps=1e-6):
+def has_out_of_bounds(centers, radii, eps=1e-8):
     """
     检查是否有圆超出边界（单位正方形）
     """
@@ -100,9 +100,9 @@ def has_out_of_bounds(centers, radii, eps=1e-6):
             return True
     return False
 
-def optimize_until_valid(centers, radii, max_attempts=5):
+def optimize_until_valid(centers, radii,n, max_attempts=5):
     for attempt in range(max_attempts):
-        centers, radii, sum_radii = optimize_radii(centers, radii)
+        centers, radii, sum_radii = optimize_radii(centers, radii,n)
         has_conflict = has_overlap(centers, radii)
         has_border = has_out_of_bounds(centers, radii)
 
@@ -110,18 +110,17 @@ def optimize_until_valid(centers, radii, max_attempts=5):
             return centers, radii, sum_radii
         print(f"⚠️ 存在非法情况：{'重叠' if has_conflict else ''}{' 越界' if has_border else ''}")
 
-def optimize_radii(centers,radii):
+def optimize_radii(centers,radii,n):
     """
-    Construct an optimized arrangement of 26 circles in a unit square
+    Construct an optimized arrangement of n circles in a unit square
     using mathematical principles and optimization techniques.
 
     Returns:
         Tuple of (centers, radii, sum_of_radii)
-        centers: np.array of shape (26, 2) with (x, y) coordinates
-        radii: np.array of shape (26) with radius of each circle
+        centers: np.array of shape (n, 2) with (x, y) coordinates
+        radii: np.array of shape (n) with radius of each circle
         sum_of_radii: Sum of all radii
     """
-    n = 26
     assert len(centers) == n
     assert len(radii) == n
     #seed = 42
@@ -170,7 +169,7 @@ def optimize_radii(centers,radii):
         method="SLSQP",
         bounds=bounds,
         constraints=constraints,
-        options={"maxiter": 1000, "ftol": 1e-8},
+        options={"maxiter": 10000, "ftol": 1e-8},
     )
 
     # Extract optimized centers and radii

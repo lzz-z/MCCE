@@ -1,7 +1,7 @@
 import argparse
 from model.MOLLM import MOLLM  # Ensure that MOLLM class is correctly imported from its respective module
 
-def main():
+def main(arg_list=None):
     # Set up argument parser
     parser = argparse.ArgumentParser(description='Run MOLLM with a configuration file')
     
@@ -13,6 +13,8 @@ def main():
     parser.add_argument('--objectives', type=str, nargs='+', default=None)
     parser.add_argument('--directions', type=str, nargs='+', default=None)
     # Parse the arguments from the command line
+    if arg_list:
+        return parser.parse_args(arg_list)
     args = parser.parse_args()
 
     # Pass the config file path to MOLLM and run it

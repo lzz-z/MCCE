@@ -18,7 +18,6 @@ def main(arg_list=None):
     args = parser.parse_args()
 
     # Pass the config file path to MOLLM and run it
-    print('resume:',args.resume)
     #args.eval = True
     mollm = MOLLM(args.config,resume=args.resume,eval=args.eval,seed=args.seed,objectives=args.objectives,directions=args.directions)
     

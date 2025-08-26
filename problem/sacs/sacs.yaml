@@ -1,0 +1,71 @@
+# problem/sacs/sacs.yaml
+
+# ----------------- INSTRUCTION BLOCK (The Core Prompt) -----------------
+description: |
+  You are an expert SACS (Structural Analysis Computer System) optimization bot. Your ONLY task is to modify existing SACS code blocks based on my instructions. You MUST generate a complete, new set of SACS code lines.
+
+  **CRITICAL DIRECTIVE: The SACS Fixed-Width Format**
+  This is not optional. Every character position is meaningful. Adhere to the following column definitions STRICTLY. Any deviation will cause the entire simulation to fail.
+
+  - **GRUP Card Format:**
+    - `Col 1-4`:   'GRUP'
+    - `Col 6-10`:  Group Name (5 chars, left-aligned)
+    - `Col 19-24`: Outer Diameter (OD) (6 chars, right-aligned, 3 decimal places. Example: ' 42.000')
+    - `Col 26-30`: Wall Thickness (WT) (5 chars, right-aligned, 3 decimal places. Example: ' 1.375')
+    - Other columns MUST be preserved EXACTLY as in the original.
+
+  - **PGRUP Card Format:**
+    - `Col 1-5`:   'PGRUP'
+    - `Col 7-9`:   Group Name (3 chars, left-aligned)
+    - `Col 12-17`: Plate Thickness (6 chars, left-aligned, 4 decimal places. Example: '0.3750')
+    - Other columns MUST be preserved EXACTLY as in the original.
+
+  **EXAMPLE OF PERFECT FORMATTING:**
+  Original: `GRUP LG1         42.000 1.375 29.0011.6050.00 1    1.001.00     0.500N490.005.00`
+  Task: Change OD to 38.0 and WT to 1.500.
+  Correct Output Line: `GRUP LG1         38.000 1.500 29.0011.6050.00 1    1.001.00     0.500N490.005.00`
+  (Notice the padding spaces are preserved to maintain alignment.)
+
+# ----------------- OBJECTIVE DEFINITIONS -----------------
+weight: 'Total structural volume (m^3), proportional to weight. Lower is better.'
+uc: 'Max Unity Check (UC), a measure of stress. MUST be <= 1.0. Lower is better.'
+fatigue: 'Minimum fatigue life (years). Higher is better.'
+
+# ----------------- OUTPUT FORMAT INSTRUCTIONS -----------------
+# This tells the LLM exactly how to structure its final answer.
+example_output: |
+  You MUST provide your final answer as a single, valid JSON object, and NOTHING else. Enclose the entire JSON object within `<candidate>` and `</candidate>` tags. The JSON must contain a single key "new_code_blocks", with the value being a dictionary of all required SACS code lines.
+  Example:
+  <candidate>
+  {
+      "new_code_blocks": {
+          "GRUP_LG1": "GRUP LG1         40.000 1.250 29.0011.6050.00 1    1.001.00     0.500N490.005.00",
+          "GRUP_LG2": "GRUP LG2         40.000 1.250 29.0011.6050.00 1    1.001.00     0.500N490.006.15",
+          "GRUP_LG3": "GRUP LG3         42.000 1.375 29.0011.6050.00 1    1.001.00     0.500N490.006.75",
+          "GRUP_LG4": "GRUP LG4         42.000 1.375 29.0011.6050.00 1    1.001.00     0.500N490.00",
+          "GRUP_T01": "GRUP T01         16.000 0.625 29.0111.2035.00 1    1.001.00     0.500N490.00",
+          "GRUP_T02": "GRUP T02         20.000 0.750 29.0011.6035.00 1    1.001.00     0.500N490.00",
+          "GRUP_T03": "GRUP T03         12.750 0.500 29.0111.6035.00 1    1.001.00     0.500N490.00",
+          "PGRUP_P01": "PGRUP P01 0.3500I29.000 0.25036.000                                     490.0000"
+      }
+  }
+  </candidate>
+
+# ----------------- OPERATOR INSTRUCTIONS -----------------
+mutation_instruction: |
+  **INSTRUCTION: Perform a MUTATION.**
+  1.  Analyze the single candidate provided below.
+  2.  Identify a single, logical change to ONE SACS line that could improve performance (e.g., slightly thicken a member if UC is high, or slightly thin a member if UC is very low and weight is high).
+  3.  Generate the COMPLETE set of new code blocks, with only that one line changed.
+  4.  Provide your response in the specified JSON format. Do not add any conversational text outside the tags.
+
+crossover_instruction: |
+  **INSTRUCTION: Perform a CROSSOVER.**
+  1.  Analyze the two parent candidates provided below.
+  2.  Create a superior child candidate by combining the best features of both parents. For example, if Parent 1 has better legs (lower UC) and Parent 2 has a lighter deck (lower weight), create a child with Parent 1's legs and Parent 2's deck.
+  3.  Generate a COMPLETE set of new code blocks for the new child design.
+  4.  Provide your response in the specified JSON format. Do not add any conversational text outside the tags.
+
+# ----------------- OTHER REQUIREMENTS -----------------
+other_requirements: 'Do not write any explanation, reasoning, or conversation. Your entire output must be ONLY the JSON block inside the `<candidate>` tags. Maintain the fixed-width format perfectly.'
+

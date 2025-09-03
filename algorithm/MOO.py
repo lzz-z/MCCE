@@ -147,7 +147,12 @@ class MOO:
         avg_top10 = np.mean([i.total for i in top10])
         avg_top100 = np.mean([i.total for i in top100_mols])
 
-        ### diversity_top100 = self.reward_system.all_evaluators['diversity']([i.value for i in top100_mols])
+        if self.config.get('cal_div',default=False):
+            from tdc import Evaluator
+            div_evaluator = Evaluator(name = 'Diversity')
+            diversity_top100 = div_evaluator([i.value for i in top100_mols])
+        else:
+            diversity_top100 = 0
         
         ### 
         if 'l_delta_b' in top10[0].property and 'aspect_ratio' in top10[0].property:
@@ -211,7 +216,7 @@ class MOO:
             'top10_auc': auc10,
             'top100_auc': auc100,
             'hypervolume': volume,
-            ###'div': diversity_top100,
+            'div': diversity_top100,
             'input_tokens': self.llm.input_tokens,
             'output_tokens': self.llm.output_tokens,
             'generated_num': self.generated_num,
@@ -245,7 +250,7 @@ class MOO:
             f'input_tokens: {self.llm.input_tokens} | '
             f'output_tokens: {self.llm.output_tokens} | '
             f'running_time: {(time.time()-self.start_time)/3600:.3f} h'
-            ###f'div: {diversity_top100:.4f}'
+            f'div: {diversity_top100:.4f}'
             )
 
 
@@ -311,7 +316,7 @@ class MOO:
                 population.extend(random.sample(database,self.config.get('inject_per_generation')))
             offspring_times = max(min(self.pop_size //2, (self.budget -len(self.mol_buffer)) //2),1)
             offspring = self.generate_offspring(population, offspring_times)
-            population = self.select_next_population(self.pop_size)
+            population = self.select_next_population(self.pop_size,offspring=offspring,population=population)
             self.log_results()
             if self.config.get('model.experience_prob')>0 and len(self.mol_buffer)>100:
                 self.update_experience()
@@ -529,9 +534,11 @@ class MOO:
         return mol_buffer
 
 
-    def select_next_population(self, pop_size):
-        #combined_population = offspring + population 
-        whole_population = [i[0] for i in self.mol_buffer]
+    def select_next_population(self,pop_size, offspring=None, population=None):
+        if offspring is not None and population is not None:
+            whole_population = offspring + population 
+        else:
+            whole_population = [i[0] for i in self.mol_buffer]
         if len(self.property_list)>1:
             return nsga2_so_selection(whole_population, pop_size)
         else:

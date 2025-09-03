@@ -1,0 +1,34 @@
+exper_name: "baseline"
+description: "peptide Proposed Target: The Neurokinin-2 Receptor (NK2R, Uniprot ID: P21452)
+  The main objective is to design highly selective and high-affinity NK2R peptide agonists. The designed molecule should:
+  Maximize the benefits of activating NK2R.
+  Avoid the side effects from activating other receptors, especially NK1R."
+
+save_dir: "/root/src/mollm_results/nk2r"
+save_suffix: "0902"
+
+resume: False
+early_stopping: False
+model:
+  name: zgca,gpt-5-minimal      #  gemini-2.5-flash-nothinking  #,gemini-2.5-flash-nothinking     gpt-4-0125-preview  gpt-4o-2024-05-13
+  # name2: zgca,gpt-4o-2024-05-13
+  
+  prompt_module: Prompt
+  experience_prob: 0.5
+  crossover_prob: 0.8
+  mutation_prob: 0.2 
+  explore_prob: 0. 
+use_au: False  # If True, this will use au model, set to false if you only want to use one LLM
+
+goals: [iptm,similarity]
+optimization_direction: [max,min]
+prompt_info_path: /root/src/MOLLM/problem/nk2r/prompt_info.yaml
+### Important ###
+evalutor_path: problem.nk2r.evaluator
+
+optimization: 
+  pop_size: 50
+  eval_budget: 5000
+
+
+

@@ -22,6 +22,7 @@ def generate_initial_population(config,seed):
     with open('/root/src/MOLLM/data/data_goal5.json','r') as f:
         data = json.load(f)
     data_type = f'random{seed-41}' # initial_pop: "random1" # best100, worst100, random1 ~ 5
+    data_type = 'random1'
     print(f'loading {data_type} as initial pop!')
     smiles = data[data_type]
     return smiles

@@ -13,7 +13,7 @@ def get_bearer_token_provider():
     pass
 # import google.generativeai as genai
 class LLM:
-    def __init__(self,model='chatgpt'):
+    def __init__(self,model='chatgpt',config=None):
         
         print(f'using model: {model}')
         self.model_choice = model
@@ -26,6 +26,8 @@ class LLM:
         print('model choice:',self.model_choice)
         self.input_tokens = 0
         self.output_tokens = 0
+        self.config = config
+        self.t = self.config.get('model.temperature',default=None)
 
     def proxy_chat(self,content):
         base_url = "http://35.220.164.252:3888/v1/chat/completions"
@@ -37,14 +39,23 @@ class LLM:
             "Authorization": f"Bearer {api_key}"  
         }
         
-        data = {
-            "model": self.model_choice, # 可以替换为需要的模型
-            "messages": [
-                {"role": "user", "content": content}
-            ],
-            "thinking_config": {"thinking_budget": 0}
-            #"temperature": 0.7 # 自行修改温度等参数
-        }
+        if self.t is not None:
+            data = {
+                "model": self.model_choice, # 可以替换为需要的模型
+                "messages": [
+                    {"role": "user", "content": content}
+                ],
+                
+                "temperature": self.t # 自行修改温度等参数
+            }
+        else:
+            data = {
+                "model": self.model_choice, # 可以替换为需要的模型
+                "messages": [
+                    {"role": "user", "content": content}
+                ],
+                
+            }
         while True:
             try:
                 response = requests.post(base_url, headers=headers, json=data)
@@ -62,6 +73,10 @@ class LLM:
         response = response.json()
         self.input_tokens += response['usage']['prompt_tokens']
         self.output_tokens += response['usage']['completion_tokens']
+        #print('prompt: \n\n',content)
+        #print('response: \n',response['choices'][0]['message']['content'])
+        #print('='*60)
+        #assert False
         return response['choices'][0]['message']['content']
 
     def _init_chat(self,model):

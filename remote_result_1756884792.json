@@ -1,0 +1,37 @@
+{
+  "summary_confidences": {
+    "chain_iptm": [
+      0.31,
+      0.31
+    ],
+    "chain_pair_iptm": [
+      [
+        0.71,
+        0.31
+      ],
+      [
+        0.31,
+        0.25
+      ]
+    ],
+    "chain_pair_pae_min": [
+      [
+        0.76,
+        9.22
+      ],
+      [
+        10.15,
+        0.76
+      ]
+    ],
+    "chain_ptm": [
+      0.71,
+      0.25
+    ],
+    "fraction_disordered": 0.24,
+    "has_clash": 0.0,
+    "iptm": 0.31,
+    "ptm": 0.68,
+    "ranking_score": 0.51
+  }
+}

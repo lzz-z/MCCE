@@ -58,7 +58,7 @@ class MOLLM:
             module = importlib.import_module(module_path)
             RewardingSystem = getattr(module, "RewardingSystem")
             self.reward_system = RewardingSystem(config=self.config)
-        self.llm = LLM(model = self.config.get('model.name'))
+        self.llm = LLM(model = self.config.get('model.name'),config = self.config)
         self.seed = seed
         self.history = []
         self.init_pops = []

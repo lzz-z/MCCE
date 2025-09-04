@@ -2,33 +2,33 @@ description: "This task is to design highly selective and high-affinity NK2R pep
   that maximize ipTM in AlphaFold3 structural predictions, target is the Neurokinin-2 Receptor (NK2R, Uniprot ID: P21452)."
 
 example_output: 'Each output new candidate must start with <candidate> and end with
-  </candidate> in peptide sequence format (using natural amino acids). 
-  Example one output: <candidate>ACDEFGH</candidate>'
+  </candidate> in peptide sequence format (using natural amino acids). Example one
+  output: <candidate>ACDEFGH</candidate>'
 
-mutation_instruction: 'Example operations include:
-  1. Substitution of amino acids to improve stability
-  2. Introduction of bulky residues for receptor selectivity
-  3. Hydrophobic/polar residue balancing to enhance binding
-  4. Modifications to increase half-life
-  5. Altering sequence motifs to reduce similarity with NKA
-  6. Property-specific optimizations toward ipTM improvements
-  '
+mutation_instruction: 'Example operations include: 1. Substitution of amino acids
+  to improve stability 2. Introduction of bulky residues for receptor selectivity
+  3. Hydrophobic/polar residue balancing to enhance binding 4. Modifications to increase
+  half-life 5. Altering sequence motifs to reduce similarity with NKA 6. Property-specific
+  optimizations toward ipTM improvements '
 
 crossover_instruction: ''
 
-# Optional, some extra requirements you would like to achieve
-other_requirements: |
-  1. Each candidate must be a valid peptide sequence composed of natural amino acids.
-  2. The maximum length must not exceed 40 amino acids.
-  3. The sequence similarity with the natural peptide NKA (HKTDSFVGLM) must be < 30% by mmseqs2, which is indicated 
-  by pass_mmseqs, if it has a similarity from mmseqs2 lower than 30%.
-  4. The primary optimization goal is to maximize ipTM against NK2R. But only when the pass_mmseqs is true and the length is not
-  more than 40 it will have a non-zero ipTM value . 
-  5. Avoid designs that may activate NK1R or NK3R to reduce side effects.
+other_requirements: "1. Each candidate must be a valid peptide sequence composed of\
+  \ natural amino acids.\n2. The maximum length must not exceed 40 amino acids.\n\
+  3. The sequence similarity with the natural peptide NKA (HKTDSFVGLM) must be < 30%\
+  \ by mmseqs2, which is indicated \nby pass_mmseqs, if it has a similarity from mmseqs2\
+  \ lower than 30%.\n4. The primary optimization goal is to maximize ipTM against\
+  \ NK2R. But only when the pass_mmseqs is true and the length is not\nmore than 40\
+  \ it will have a non-zero ipTM value . \n5. Avoid designs that may activate NK1R\
+  \ or NK3R to reduce side effects.\n"
 
-iptm: ipTM (interface predicted TM-score) is a confidence metric introduced in AlphaFold-Multimer and extended in AlphaFold3. 
-  It evaluates the predicted accuracy of the binding interface between two molecules (e.g., a peptide and its receptor). ipTM ranges from 0 to 1.
-  Higher ipTM values indicate that the predicted interface is highly reliable and structurally consistent.
-similarity: the similarity of the candidate peptide to NKA (HKTDSFVGLM) by biopython, it is to guide to when the pass_mmseqs is False,
-  a smaller similarity is desired. Note that this similarity is different from the similarity by
-  mmseqs2, a similarity higher than 30% does not mean it has a similarity higher than 30% by mmseqs2.
+iptm: ipTM (interface predicted TM-score) is a confidence metric introduced in AlphaFold-Multimer
+  and extended in AlphaFold3. It evaluates the predicted accuracy of the binding interface
+  between two molecules (e.g., a peptide and its receptor). ipTM ranges from 0 to
+  1. Higher ipTM values indicate that the predicted interface is highly reliable and
+  structurally consistent.
+
+similarity: the similarity of the candidate peptide to NKA (HKTDSFVGLM) by biopython,
+  it is to guide to when the pass_mmseqs is False, a smaller similarity is desired.
+  Note that this similarity is different from the similarity by mmseqs2, a similarity
+  higher than 30% does not mean it has a similarity higher than 30% by mmseqs2.

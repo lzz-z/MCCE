@@ -26,6 +26,7 @@ class Prompt:
         self.pure_experience = None
         self.exp_times = 0
         self.experience_prob = config.get('model.experience_prob')
+        self.num_offspring = self.config.get('optimization.num_offspring',default=2)
         with open(config.get("prompt_info_path"), "r") as yaml_file:
             self.info = yaml.safe_load(yaml_file)
             if self.config.get('n_circles',default=False):
@@ -89,7 +90,7 @@ class Prompt:
 
             # 如果有 constraints，添加说明
             if ind.constraints is not None:
-                constraint_str = ", ".join([f"{k}:{v:.5f}" for k, v in ind.constraints.items()])
+                constraint_str = ", ".join([f"{k}:{v}" for k, v in ind.constraints.items()])
                 entry += f", constraint values are: {constraint_str}"
             entries.append(entry + "\n")
 
@@ -99,20 +100,20 @@ class Prompt:
     def _make_instruction_prompt(self, oper_type: str) -> str:
         common_tail = (self.info['other_requirements'] + "\n" 
                        + self.info['example_output'] + "\n" +
-                        "Do not write code. Do not give any explanation." )
+                        "Do not give any explanation." )
 
         if oper_type == 'mutation':
             return (
-                "Generate 2 new better candidates through mutation, ensuring they are different from all points provided above and not dominated by any of them.\n"
+                f"Generate {self.num_offspring } new better candidates through mutation, ensuring they are different from all points provided above and not dominated by any of them.\n"
                 + self.info['mutation_instruction'] + '\n' + common_tail)
         elif oper_type == 'crossover':
             return (
-                "Give me 2 new better candidates that are different from all points above and not dominated by them.\n"
+                f"Give me {self.num_offspring} new better candidates that are different from all points above and not dominated by them.\n"
                 "Use crossover and your knowledge to create better candidates.\n"
                 + self.info['crossover_instruction'] + '\n' + common_tail)
         elif oper_type == 'explore':
             return (
-                "Confidently propose two novel and better candidates different from the given ones, leveraging your expertise.\n" + common_tail)
+                f"Confidently propose {self.num_offspring } novel and better candidates different from the given ones, leveraging your expertise.\n" + common_tail)
         else:
             raise NotImplementedError(f'Unsupported instruction type: {oper_type}')
 

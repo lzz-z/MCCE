@@ -72,6 +72,7 @@ class MOO:
         self.record_dict['au_history_smiles'] = []
         self.time_step = 0
         self.start_time = time.time()
+        self.num_offspring = self.config.get('optimization.num_offspring',default=2)
 
     def generate_initial_population(self, n):
         module_path = self.config.get('evalutor_path')  # e.g., "molecules"
@@ -306,6 +307,18 @@ class MOO:
                 population = self.evaluate(population) # including removing invalid and repeated candidates
             self.log_results()
             init_pops = copy.deepcopy(population)
+        data = {
+                'history':self.history,
+                'init_pops':init_pops,
+                'final_pops':population,
+                'all_mols':self.mol_buffer,
+                'properties':self.property_list,
+                'evaluation': self.results_dict['results'],
+                'running_time':f'{(time.time()-start_time)/3600:.2f} hours'
+            }
+        with open(store_path, 'wb') as f:
+            pickle.dump(data, f)    
+        
         self.prompt_generator = self.prompt_module(self.config)
         
         self.num_gen = 0
@@ -314,9 +327,9 @@ class MOO:
             if self.config.get('inject_per_generation'):
                 print('inject!')
                 population.extend(random.sample(database,self.config.get('inject_per_generation')))
-            offspring_times = max(min(self.pop_size //2, (self.budget -len(self.mol_buffer)) //2),1)
+            offspring_times = max(min(self.pop_size //self.num_offspring, (self.budget -len(self.mol_buffer)) //self.num_offspring),1)
             offspring = self.generate_offspring(population, offspring_times)
-            population = self.select_next_population(self.pop_size,offspring=offspring,population=population)
+            population = self.select_next_population(self.pop_size)
             self.log_results()
             if self.config.get('model.experience_prob')>0 and len(self.mol_buffer)>100:
                 self.update_experience()
@@ -534,11 +547,8 @@ class MOO:
         return mol_buffer
 
 
-    def select_next_population(self,pop_size, offspring=None, population=None):
-        if offspring is not None and population is not None:
-            whole_population = offspring + population 
-        else:
-            whole_population = [i[0] for i in self.mol_buffer]
+    def select_next_population(self,pop_size):
+        whole_population = [i[0] for i in self.mol_buffer]
         if len(self.property_list)>1:
             return nsga2_so_selection(whole_population, pop_size)
         else:

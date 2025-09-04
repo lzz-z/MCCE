@@ -229,9 +229,9 @@ class RemoteAPITester:
             if not save_file:
                 save_file = f"remote_result_{int(time.time())}.json"
             
-            with open(save_file, 'w', encoding='utf-8') as f:
-                json.dump(result, f, indent=2, ensure_ascii=False)
-            print(f"💾 完整结果已保存: {save_file}")
+            #with open(save_file, 'w', encoding='utf-8') as f:
+            #    json.dump(result, f, indent=2, ensure_ascii=False)
+            #print(f"💾 完整结果已保存: {save_file}")
             
             return True, iptm
         else:

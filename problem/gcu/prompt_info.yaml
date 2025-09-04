@@ -1,0 +1,295 @@
+example_output: 'Each complete new candidate code must start with <candidate> and end with
+  </candidate>. Example one output: <candidate>
+  #include <tops/tops_runtime.h>
+  #include <tops.h>
+  __global__ void kernel_var ...</candidate> You must output the complete code inside <candidate>.'
+mutation_instruction: 'Example operations include: 
+  挑选其中一个你觉得有潜力改的代码，进一步优化他的速度'
+crossover_instruction: 'Example operations include: 
+  结合你觉得这两个代码中做的好的部分,进一步优化他的速度'
+other_requirements: 'status 是success， 每个testcase都是passed才是完全成功
+  其他情况的话每个代码的debug的信息都放在了debug_log里面供你参考了，
+  分数越接近100分越好，如果parent candidate 里面的代码有误，可以优先修好他再优化
+  在保证代码正确的前提下，我们的优化目标就是让算子越快越好，不用考虑内存占用
+  线程可以直接选择12（因为gcu210支持12线程）'
+gcu_var: "GCU Var
+  本题希望选手们完成 GCU 上方差计算。详情参考 torch.var。本题中，input为1维数组，其余参数均为torch上的默认值。
+  输入参数：
+  inp:	输入设备地址，单精度浮点数数组，长度为 nr_elems。
+  out:	输出设备地址，单精度浮点数。
+  nr_elems:	输入数组长度。
+  评分标准与数据规模
+  建立在功能正确的基础上，选手的总分由功能得分和性能得分相加得到。本题共 10 个测试点。性能分数将综合所有选手在该测试点的性能得出。数据规模如下：
+  1、40% 的测试点中，0 < nr_elems <= 10K
+  2、30% 的测试点中，10K <= nr_elems <= 1M
+  3、30% 的测试点中，1M <= nr_elems <= 10M
+  满分是100分, 接口是void GCU_VAR(float * __restrict dev_inp, float * __restrict dev_out, const int nr_elems) {}"
+gcu_silu: "
+  GCU Silu
+  本题希望选手们完成 GCU 上单精度 SILU 计算。详情可参考 torch.nn.functional.silu 。
+  输入参数：
+  dev_inp:	设备地址，一维单精度浮点数数组，长度为 nr_elems。
+  dev_out:	设备地址，一维单精度浮点数数组，长度为 nr_elems。
+  nr_elems:	数组长度。
+  评分标准与数据规模
+  建立在功能正确的基础上，选手的总分由功能得分和性能得分相加得到。本题共 10 个测试点。性能分数将综合所有选手在该测试点的性能得出。数据规模如下：
+  1、40% 的测试点中，0 < nr_elems <= 10K
+  2、30% 的测试点中，10K <= nr_elems <= 1M
+  3、30% 的测试点中，1M <= nr_elems <= 10M
+  满分是100分, 接口是void GCU_SILU(float * __restrict dev_inp, float * __restrict dev_out, const int nr_elems) {}
+  "
+gcu_gemm2: "GCU GEMM v2
+  本题是示例题目gemm的扩展，希望选手完成更多数据规模下的 GCU 上单精度 GEMM 算子。
+  输入参数：
+  lhs:	左矩阵的设备地址，二维单精度浮点数数组的起始地址，数据按行优先连续存储，数组大小为 M*K*sizeof(float),具体layout由is_lhs_transpose参数决定。
+  rhs:	右矩阵的设备地址，二维单精度浮点数数组的起始地址，数据按行优先连续存储，数组大小为 K*N*sizeof(float)，具体layout由is_rhs_transpose参数决定。
+  out:	计算结果的设备地址，二维单精度浮点数数组的起始地址，数据按行优先连续存储，数组大小为 M*N*sizeof(float), 具体layout由is_out_transpose参数决定。
+  M:	结果矩阵的行数。
+  K:	左矩阵的列数。
+  N:	结果矩阵的列数。
+  is_lhs_transpose:	如果为false lhs的layout为M*K, 如果为true lhs的layout为K*M。
+  is_rhs_transpose:	如果为false rhs的layout为K*N, 如果为true rhs的layout为N*K。
+  is_out_transpose:	如果为false out的layout为K*N, 如果为true out的layout为N*K。
+  评分标准与数据规模
+  建立在功能正确的基础上，选手的总分由功能得分和性能得分相加得到。本题共 10 个测试点。性能测试分数将综合所有选手在该测试点的性能得出。数据规模如下：
+  所有的测试点，保证每个输入、输出tensor所占用的字节数小于2GB,接口是void GCU_GEMM(float *__restrict dev_lhs, float *__restrict dev_rhs, float *__restrict dev_out,
+              const int m, const int k, const int n,
+              bool is_lhs_transpose, bool is_rhs_transpose, bool is_out_transpose) {
+
+  }
+  更多的提示：
+  /**
+  * __device__ __forceinline__ int GetThreadNum(void);
+  * @brief Get Thread(sip) number
+  * @param
+  * @return Thread(sip) number
+  */
+
+  /**
+  * __device__ __forceinline__ int GetThreadIdx(void)
+  * @brief Get global thread(sip) idx
+  * @param
+  * @return global thread(sip) idx
+  */
+
+  /**
+  * __device__ void dot_general_fp32(int lhs_addr, int rhs_addr, int M, int K, int N, int reduce_index, int reduce_cnt, int out_addr)
+  * @brief
+  * M == 16X
+  * N = 32X
+  * K = 32X
+  * Semantic: [M,K] * [K,N] == [M,N]
+  * DataFormat: [K/32,M,32] * [N/32,K,32] == [M,N]
+  * @param lhs_addr lhs addr
+  * @param rhs_addr rhs addr
+  * @param M
+  * @param K
+  * @param M
+  * @param reduce_index
+  * @param reduce_cnt
+  * @param out_addr output addr
+  */
+  满分是100分
+  "
+
+description: "这个题目是要写燧原 GCU(TopsCC)算子, 下面是我给你总结的注意事项：燧原 GCU (TopsCC) 文档帮你总结一下写算子时需要特别注意的地方，以及哪些和 CUDA/NVIDIA 生态里的习惯不同、容易踩坑的点。\n\
+  \n\U0001F6A9 和 CUDA 的差异 & 潜在坑点\n1. 内存寻址和访问限制\n\nGCU 2.0 不支持全局寻址\n\n不能直接访问 __shared__\
+  \ (L2) 和 __device__ (L3) 内存。\n\n必须通过 DTE (数据搬运引擎) 把数据搬运到 L1 (Private) 才能算。\n\n⚠️\
+  \ CUDA 里常见的 __shared__ 直接算在 GCU 上不行。\n\n动态 shared memory 限制\n\n每个 kernel 只能申请一个动态大小的\
+  \ shared memory。\n\n大小上限：T20 ≤ 6MB, i20 ≤ 24MB。\n\n变量对齐\n\n向量操作的内存必须用 __valigned__\
+  \ 修饰，不然 vload/vstore 会报错或 silent fail。\n\n2. Thread / Block 限制\n\nBlock 内线程数极小\n\
+  \ngcu200 (T20)：最大 6\n\ngcu210 (i20)：最大 12\n\n⚠️ CUDA 常用 256/512/1024 threads/block\
+  \ 的模式在 GCU 完全行不通。\n\n算子必须考虑 小 block 大 grid 的调度。\n\nCooperative kernel 限制\n\ngcu200：grid\
+  \ 总 threads ≤ 4\n\ngcu210：grid 总 threads ≤ 2\n\n⚠️ 远比 CUDA 严格，几乎只能小规模并行。\n\n3. DTE\
+  \ (Data Transfer Engine)\n\n强制用 DTE 搬运数据\n\nGlobal(L3) ↔ Shared(L2) ↔ Private(L1)\
+  \ 的搬运必须通过 DTE。\n\n没初始化 DTE context 会 hang。推荐 tops::dte_scope 自动管理。\n\n上下文修饰符\n\n\
+  __shared_dte__：Block 内共享，只能 Global ↔ Shared\n\n__private_dte__：Thread 私有，只能 Global\
+  \ ↔ Shared\n\n无修饰：Thread level，可 Global/Shared/Private 全部搬运\n\n使用错误时不会报错\n\n地址空间类型\
+  \ (tops::Global vs tops::Private) 写错可能直接 hang。\n\n⚠️ 需要在开发阶段加 -DTOPS_ENABLE_DTE_CHECK。\n\
+  \n4. 向量计算模型\n\nVector 默认长度 128B\n\nvint = 32 x int, vfloat = 32 x float, vchar =\
+  \ 128 x int8。\n\n⚠️ 必须按向量长度设计循环，不能乱取。\n\n常见算子模式\n\nvload / vstore 对齐访问。\n\nvadd/vmul/...\
+  \ 等算子都有对应 API，不支持隐式类型转换，必须显式 vcast/vbitcast。\n\n5. 调试和运行时\n\nprintf 限制\n\n只能打印标量，不支持\
+  \ %s, %p。指针打印要转 long long。\n\n有 printf/assert 时，会强制 runtime 进入同步模式，性能大幅下降。\n\nKernel\
+  \ abort 难调试\n\n一些 device 端错误不会被 host 捕获（比如 vload 未对齐）。\n\n可能只有下一次 printf 才暴露出来。\n\
+  \n6. 资源和并发\n\n显存很小\n\n设备内存上限：4GB。\n\nhost 内存：32GB (T20)，64GB (i20)。\n\n任务流 stream\
+  \ 支持，但有限\n\n支持异步 kernel、Memcpy、Memset，类似 CUDA stream。\n\n但数据传输并发度有限，比如 DTE 只有一个\
+  \ pipeline 就会串行化。\n\n✅ 写算子时需要遵循的关键点\n\n设计小线程模型\n\nCUDA 算子通常依赖 256+ threads per block\
+  \ 并行，GCU 必须改为 tile-based + software pipeline。\n\n每个 thread 处理更大块数据，依靠向量化补并行度。\n\n\
+  用 DTE 做搬运 + L1 运算\n\n算子必须在 L1 buffer 上算。\n\n模式：memcpy(L3→L1) → vload/vstore 计算 →\
+  \ memcpy(L1→L3)。\n\n要用异步 DTE + double buffer 实现 pipeline。\n\n显式向量化\n\n不要写标量循环，必须用\
+  \ vload/vstore + vadd/vmul 这些 API。\n\n否则性能会比 CPU 还差。\n\n强制对齐和类型安全\n\n内存必须 __valigned__，访问用\
+  \ tops::vlength<T>()。\n\n所有类型转换必须显式 vcast/vbitcast。\n\n调试策略\n\n开发时开 -DTOPS_ENABLE_DTE_CHECK，大量用\
+  \ printf((long long)ptr) 检查地址空间。\n\n避免 runtime silent hang。\n\n燧原 GCU 算子编写关键总结\n\
+  1. 编程模型与 CUDA 的差异\n1.1 Thread/Block/Grid 结构\n\nCUDA：一个 Block 可以有 1024+ threads。\n\
+  \nGCU：\n\ngcu200 (T20)：Block 最大 threads 数 = 6\n\ngcu210 (i20)：Block 最大 threads 数\
+  \ = 12\n\nGrid 最大限制：x: 65536, y: 256, z: 256\n\n结论：算子必须设计为 小 Block + 大 Grid，每个 thread\
+  \ 负责更多工作。\n\n1.2 内存模型\n\nCUDA：\n\n__global__ (Device memory = L3) 可直接访问\n\n__shared__\
+  \ (Block memory = L2) 可直接访问\n\nGCU：\n\nL3/L2 不可直接算，只能通过 DTE (数据搬运引擎) 搬到 L1 再计算\n\
+  \n私有变量默认在 L1 (Private)\n\n动态 shared memory：每个 kernel 只能申请一个\n\n1.3 数据搬运 (DTE)\n\n\
+  必须显式写 DTE 流程：\n\nctx.init() → 配置 mdspan → tops::memcpy(ctx, dst, src) → ctx.destroy()\n\
+  \nDTE context 三种：\n\n__shared_dte__：Block 共享，只能 Global ↔ Shared\n\n__private_dte__：Thread\
+  \ 私有，只能 Global ↔ Shared\n\n默认 (无修饰)：Thread 级，支持 Global/Shared/Private 全部搬运\n\n⚠️\
+  \ 没初始化就用 → hang\n\n⚠️ 地址空间写错 (比如 L3 当成 Private) → hang\n\n1.4 向量计算\n\n一个向量长度固定 =\
+  \ 128B\n\nvchar = 128 × int8\n\nvshort = 64 × int16\n\nvint = 32 × int32\n\nvfloat\
+  \ = 32 × float\n\n访问方式：\n\nauto v = vload<vint>(addr);\n\nvstore(vsum, addr);\n\n\
+  必须 __valigned__ 修饰数组，否则 vload/vstore 崩溃。\n\n1.5 调试 & 限制\n\nprintf：只支持标量，不支持 %s/%p，指针要\
+  \ (long long)ptr。\n\n有 printf/assert 时，runtime 会进入 同步模式，性能骤降。\n\nKernel abort 有时\
+  \ host 捕捉不到，常见情况：未对齐的 vload。\n\n2. 算子设计的关键步骤\n\n分块 (Tile) 设计\n\n每个 thread 处理一个 tile\
+  \ (例如 128 元素)。\n\n用 tops::vlength<T>() 控制循环展开。\n\n数据搬运 (DTE pipeline)\n\nGlobal(L3)\
+  \ → Private(L1) buffer\n\n计算 (用向量 API)\n\nPrivate(L1) → Global(L3)\n\n双缓冲 (Double\
+  \ Buffer)\n\n用两个 buffer + 两个 DTE context → 计算和搬运并行。\n\n3. CUDA vs GCU 对照例子\n3.1\
+  \ 向量加法 (CUDA)\n__global__ void vec_add(float *a, float *b, float *c, int N) {\n\
+  \    int idx = blockIdx.x * blockDim.x + threadIdx.x;\n    if (idx < N) {\n    \
+  \    c[idx] = a[idx] + b[idx];\n    }\n}\n\n3.2 向量加法 (GCU)\n#include <tops/tops_runtime.h>\n\
+  #include <tops.h>\n\n__global__ void vec_add(float *a, float *b, float *c, int N)\
+  \ {\n    tops_dte_ctx_t ctx;\n    tops::dte_scope s(ctx); // 自动 init/destroy\n\n\
+  \    // 每个线程负责处理一段 tile\n    __valigned__ float buf_a[128];\n    __valigned__ float\
+  \ buf_b[128];\n    __valigned__ float buf_c[128];\n\n    tops::mdspan bufA(tops::Private,\
+  \ buf_a, 128);\n    tops::mdspan bufB(tops::Private, buf_b, 128);\n    tops::mdspan\
+  \ bufC(tops::Private, buf_c, 128);\n\n    // tile 循环\n    for (int i = 0; i < N;\
+  \ i += 128) {\n        // 1. 从 L3 拷贝到 L1\n        tops::mdspan srcA(tops::Global,\
+  \ a + i, 128);\n        tops::mdspan srcB(tops::Global, b + i, 128);\n        tops::memcpy(ctx,\
+  \ bufA, srcA);\n        tops::memcpy(ctx, bufB, srcB);\n\n        // 2. 向量加法\n \
+  \       for (int j = 0; j < 128; j += tops::vlength<vfloat>()) {\n            auto\
+  \ va = tops::vload<vfloat>(buf_a + j);\n            auto vb = tops::vload<vfloat>(buf_b\
+  \ + j);\n            auto vc = tops::vadd(va, vb);\n            tops::vstore(vc,\
+  \ buf_c + j);\n        }\n\n        // 3. 写回 L3\n        tops::mdspan dstC(tops::Global,\
+  \ c + i, 128);\n        tops::memcpy(ctx, dstC, bufC);\n    }\n}\n\n3.3 主机端调用\n\
+  int main() {\n    int N = 1024;\n    size_t Nbytes = N * sizeof(float);\n\n    float\
+  \ *A_d, *B_d, *C_d;\n    float *A_h = (float*)malloc(Nbytes);\n    float *B_h =\
+  \ (float*)malloc(Nbytes);\n    float *C_h = (float*)malloc(Nbytes);\n\n    // 初始化数据\n\
+  \    for (int i = 0; i < N; i++) {\n        A_h[i] = i;\n        B_h[i] = 2*i;\n\
+  \    }\n\n    topsMalloc(&A_d, Nbytes);\n    topsMalloc(&B_d, Nbytes);\n    topsMalloc(&C_d,\
+  \ Nbytes);\n\n    topsMemcpy(A_d, A_h, Nbytes, topsMemcpyHostToDevice);\n    topsMemcpy(B_d,\
+  \ B_h, Nbytes, topsMemcpyHostToDevice);\n\n    // 启动 kernel\n    vec_add<<<dim3(1),\
+  \ dim3(1)>>>(A_d, B_d, C_d, N);\n\n    topsMemcpy(C_h, C_d, Nbytes, topsMemcpyDeviceToHost);\n\
+  \n    for (int i = 0; i < 10; i++) {\n        printf(\"%f\\n\", C_h[i]);\n    }\n\
+  \n    topsFree(A_d);\n    topsFree(B_d);\n    topsFree(C_d);\n    free(A_h);\n \
+  \   free(B_h);\n    free(C_h);\n\n    return 0;\n}\n\n4. 写算子时的 Checklist\n\n✅ 用\
+  \ DTE pipeline 做 L3 ↔ L1 数据流\n✅ 每个 thread 处理 tile，Block threads ≤ 6/12\n✅ 所有 buffer\
+  \ 必须 __valigned__\n✅ 循环展开按 tops::vlength<T>()\n✅ 调试时开 -DTOPS_ENABLE_DTE_CHECK\n\
+  ✅ 打印指针 (long long)ptr\n✅ 避免 kernel 内频繁 printf/assert\n\n\U0001F449 总结一句：GCU 写算子就是\
+  \ tile-based + DTE 搬运 + 向量化算子堆叠，跟 CUDA 的“海量线程 + shared memory 并行”是完全不同的思路。\n\n燧原\
+  \ GCU Kernel API 重点速查\n1. 数据类型 (Scalar & Vector)\n\n标量浮点类型\n\ntops::bfloat (bfloat16)\n\
+  \ntops::half (FP16)\n\n都支持：初始化、类型转换、四则运算、比较运算、复合赋值 (+=, -=, …)。\n\n转换：float f =\
+  \ (float)tops::bfloat(1.25);\n\n向量类型\n\nvchar (128 × int8)\n\nvshort (64 × int16)\n\
+  \nvint (32 × int32)\n\nvfloat (32 × float)\n\nvhalf (64 × half)\n\nvbfloat (64 ×\
+  \ bfloat)\n\n使用 tops::scalar2vector<T>::type 可查对应向量类型。\n\n广播\n\nvbroadcast(x) 可把标量广播成向量\n\
+  \nvbfloat v = tops::vbroadcast(tops::bfloat(1.0f));\n\n\n⚠️ 注意：所有向量 load/store 必须\
+  \ 对齐，数组声明要 __valigned__。\n\n2. DTE (数据搬运引擎)\n\n单 DTE 上下文：\n\ntops_dte_ctx_t ctx;\
+  \ ctx.init(); … ctx.destroy();\n\n推荐：tops::dte_scope scope(ctx); 自动管理。\n\n多 DTE\
+  \ 串联 (pipeline)\n\ntops::dte_chain<ctx1, ctx2>(ctx1, ctx2);\n\n方法：.connect(), .trigger(),\
+  \ .wait(), .trigger_and_wait()\n\n⚠️ 没有 init 的 ctx 就调用 → kernel hang。\n\n3. Elementwise\
+  \ API (逐元素算子)\n\n核心函数\n\nelemwise_kernel → L3 全局内存输入输出，自动 tile 搬运到 L1，再算\n\nelemwise_tiles\
+  \ → tile 粒度的计算\n\nelemwise_local → 已在 L1 buffer 的数据上直接算\n\n典型用法\n\ntops::elemwise_kernel(\n\
+  \    [] __device__(auto &out, auto &in) {\n        out = in * in;  // L1 上的逐元素操作\n\
+  \    },\n    N, tops::Input(0), input_d, tops::Output(0), output_d\n);\n\n\n模板参数\n\
+  \ntile_size：每 tile 多少元素（自动对齐到向量长度）\n\nvectorized：是否用向量 load/store (true 更快)\n\n\
+  async：是否异步搬运\n\n4. Reduction API (归约算子)\n\n核心函数\n\nreduction_kernel → 在 L3 张量上做归约\n\
+  \nreduction_local → 已在 L1 上做归约\n\n运算符\n\n__reduction_add(lhs, rhs)\n\n__reduction_max(lhs,\
+  \ rhs)\n\n__reduction_min(lhs, rhs)\n\n简化 kernel\n\nsum, max, min → 针对 3D 张量的内置\
+  \ Reduce\n\n⚠️ 归约默认在 第 1 维 (中间维度)，要小心 shape。\n\n5. NN & Math API\n\n矩阵乘法 (Demo 级别)\n\
+  \ntops::nn::dot(lhs, rhs, out, n, k, m)\n\n⚠️ 官方说是 demo，请换用 topsDNN 库做真正的高性能 GEMM。\n\
+  \n数学运算\n\n__powf, fmaxf, fminf, fabsf, sigmoid, gelu, softplus, …\n\n和 CUDA 的 device_math.h\
+  \ 类似，常见激活函数全有。\n\n6. 内存访问工具\n\n读写不同层级\n\nread_local, write_local\n\nread_shared,\
+  \ write_shared\n\nread_global, write_global\n\n常用模式\n\nL3 → L1：read_global\n\nL1\
+  \ → L3：write_global\n\n7. 内置算子 (Select / Broadcast / Elementwise)\n\n选择运算\n\nselect_kernel\
+  \ / select\n\n根据条件选择 lhs/rhs：\n\noutput[i] = cond[i] ? lhs[i] : rhs[i];\n\n\n广播运算\n\
+  \nbroadcast_in_dim\n\n把 2D 扩展成 3D（指定哪个维度做 broadcast）。\n\n8. 需要特别记住的坑\n\nBlock 内线程数限制\n\
+  \ngcu200 ≤ 6，gcu210 ≤ 12 → 必须 tile-based 算法。\n\n向量长度固定\n\n必须按 tops::vlength<T>()\
+  \ 循环展开，不能随便写循环。\n\nL3/L2 不能直接算\n\n必须搬运到 L1 (Private)。\n\n调试\n\nprintf(\"%lld\",\
+  \ (long long)ptr); 打印指针\n\n有 printf/assert 时 → runtime 强制同步，性能掉很多。\n\n矩阵乘法\n\nnn::dot\
+  \ 仅 demo → 生产要用 topsDNN。\n\n9. 最小示例：平方运算 (Elementwise Kernel)\n#include <tops/elemwise.h>\n\
+  \n__global__ void square_kernel(float *out, float *in, int N) {\n    tops::elemwise_kernel(\n\
+  \        [] __device__(auto &o, auto &x) {\n            o = x * x;  // L1 上操作\n\
+  \        },\n        N,\n        tops::Input(0), in,\n        tops::Output(0), out\n\
+  \    );\n}\n\n\n主机端：\n\nsquare_kernel<<<1,1>>>(out_d, in_d, N);\n\n\n\U0001F4CC\
+  \ 总结：\n\n数据类型：bfloat/half + 向量类型要熟。\n\nDTE：所有搬运必须显式写，没 init 会死。\n\nElemwise/Reduction：提供了高层\
+  \ API，可以少写 DTE。\n\n坑：线程数极小、必须 tile-based、所有 buffer 要对齐。\n\nCU 高频速查表（ChatGPT 内部使用版）\n\
+  1. 基础数据类型\n\n浮点标量\n\ntops::bfloat / bfloat16\n\ntops::half\n\n支持：构造、类型转换、+ - * /、比较运算、+=\
+  \ -= *= /=\n\n向量类型（128B 宽度）\n\nvbfloat (64 × bfloat)\n\nvhalf (64 × half)\n\nvfloat\
+  \ (32 × float)\n\nvint (32 × int32)\n\nvshort (64 × int16)\n\nvchar (128 × int8)\n\
+  \n对应映射：tops::scalar2vector<T>::type\n\n广播\n\nvbroadcast(x) → 标量扩展成对应向量\n\n⚠️ 数组必须\
+  \ __valigned__，否则 vload/vstore 崩。\n\n2. DTE（数据搬运引擎）\n\n单个 context\n\ntops_dte_ctx_t\
+  \ ctx;\nctx.init(); … ctx.destroy();\n\n\n推荐 tops::dte_scope scope(ctx); 自动管理。\n\
+  \n多 DTE pipeline\n\ntops::dte_chain<ctx1, ctx2>(ctx1, ctx2)\n\n方法：.connect() .trigger()\
+  \ .wait() .trigger_and_wait()\n\n⚠️ 没 init ctx 就用 → hang\n\n3. Elementwise\n\n逐元素算子\n\
+  \ntops::elemwise_kernel(\n    [] __device__(auto &o, auto &x) { o = x * x; },\n\
+  \    N,\n    tops::Input(0), in,\n    tops::Output(0), out\n);\n\n\ntile 粒度\n\n\
+  elemwise_tiles(f, size, …)\n\n可控制 tile_size, vectorized, async\n\n在 L1 buffer 上直接算\n\
+  \nelemwise_local\n\n4. Reduction\n\nkernel 级\n\nreduction_kernel(f, out, out_shape,\
+  \ in, in_shape, identity)\n\n默认归约维度 = 第 1 维\n\nlocal 级\n\nreduction_local(vf, sf,\
+  \ output, input)\n\n内置\n\nsum, max, min\n\n内部运算符：__reduction_add, __reduction_max,\
+  \ __reduction_min\n\n5. 常见算子\n\nselect / 条件选择\n\nselect_kernel(f, out, lhs, rhs,\
+  \ size);\n// out[i] = cond[i] ? lhs[i] : rhs[i];\n\n\nbroadcast\n\nbroadcast_in_dim(out,\
+  \ in, dim0, dim1, broadcast_dim, broadcast_size)\n\nNN\n\ntops::nn::dot(lhs, rhs,\
+  \ out, n, k, m)\n\n⚠️ 官方说 demo，用 topsDNN 替换\n\n6. 数学函数\n\n__powf, fmaxf, fminf,\
+  \ fabsf, sigmoid, gelu, softplus, rsqrt\n\nCUDA device_math 的常用函数几乎都有\n\n7. 内存访问\n\
+  \n不同层级读写\n\nread_local / write_local\n\nread_shared / write_shared\n\nread_global\
+  \ / write_global\n\n8. 调试 & 限制\n\nprintf(\"%lld\", (long long)ptr); 打印指针\n\nprintf/assert\
+  \ → runtime 强制同步，性能掉很多\n\nBlock threads：gcu200 ≤ 6, gcu210 ≤ 12\n\n所有算子必须 tile-based\
+  \ + 向量化 + DTE 搬运\n\n\U0001F4CC 总结一句：\nGCU 写算子 = tile-based + L3/L2→DTE→L1 搬运 + 向量算子操作\
+  \ + 写回 L3\n\n有很多犯错的原因，比如：\n我把 CUDA 的思维 习惯性套到了 GCU 上\n\nCUDA 可以随便 inp[i]、*out=…、atomicAdd、__shared__，\n\
+  \n但 GCU 2.x 完全不允许直接访问 L3/L2，只能靠 DTE + mdspan。\n\n所以我老是先写一个 CUDA 风格的 baseline，然后再补丁式地改\
+  \ → 很容易忘掉必须全程用 DTE pipeline。\n\n❷ 我用了 不存在的 API 名字\n\n写 tops::vreduce_add、tops::reduce_add\
+  \ 是照 CUDA 的 warpReduce / NCCL 的风格编的。\n\n但 GCU 的 tops SDK 里根本没有这些 helper function。\n\
+  \n真正能用的 API 是：\n\nvload/vstore/vadd/vmul/vsub/vexp/... 这类 SIMD 算子\n\nreduction_kernel\
+  \ / reduction_local 这类 归约框架\n\n归约（reduce sum）必须自己展开，或者用官方的 tops::sum。\n\n所以一旦我写了一个“想当然”的函数名，就一定会报\
+  \ no member named ...。\n\n❸ 对 slice_async 的参数记错了\n\n我写成了 slice_async(ctx, dst, src)，只给了\
+  \ 3 个参数。\n\n实际上 GCU 的 slice_async 签名需要 ≥4 个参数，至少要带上 起始坐标 offset。\n\n例如：\n\ntops::event\
+  \ e = tops::slice_async(ctx, l1_md, global_md, {offset});\n\n\n这个错误本质上也是因为我没严格按照\
+  \ GCU 的 API 文档去写，而是照 CUDA 的 memcpyAsync 习惯随手写的。\n犯错的根本原因是：\n\n惯性思维：太习惯 CUDA 的 API\
+  \ / 语法，直接套过来。\n\nAPI 不查文档就凭记忆瞎写：导致用到不存在的 reduce_add、参数数量错。\n\n没有在一开始就完全切换到 GCU 的编程模型：应该从头就用\
+  \ tile + mdspan + reduction，而不是先写标量版再往上改。\n\n✅ 以后避免的做法：\n\n绝不写 CUDA 风格代码再改 → 一开始就用\
+  \ GCU 范式（DTE + mdspan）。\n\n所有算子名字都查 tops 头文件确认 → 不臆造 API。\n\n归约统一用 tops::sum / reduction_kernel，不要自己发明\
+  \ reduce_add。\n\n搬运统一用 slice_async(ctx, dst, src, {offset})，保证参数对齐。\n\n我刚才为什么会犯错（复盘）\n\
+  \n用了被评测禁用的分配 API\n我最初用 topsMalloc/topsFree 做分片结果缓冲，但评测环境把它们宏替换成 _topsMalloc_disabled/_topsFree_disabled（故编译报错）。根因：我默认能申请一点\
+  \ L3 临时内存，其实题目集不允许。\n\n忽略了 nodiscard 返回值\ntopsGetDeviceProperties()、topsDeviceSynchronize()\
+  \ 有 [[nodiscard]] 属性，我当时没接收返回值，被编译器警告。修复方式：接收后（必要时）(void) 消除未使用告警或做检查。\n\n并行归约路径设计有隐含前提\n\
+  原思路用 L3 缓冲做跨线程汇总；在禁用分配条件下不可行。我改为零额外分配版本（单线程），能过编译但性能不佳。下面给出在不分配的前提下依然能并行的高性能方案。\n\
+  \n如果把一个返回值为 void 的同步接口当成了会返回 tops::event 的异步接口来用。\n\ntops::transpose_deslice(...)（无\
+  \ _async 后缀）是同步复合接口，返回 void。\n\n只有带 _async 的版本（tops::transpose_deslice_async(...)）才会返回\
+  \ tops::event，可赋给 ev_out[ob]。\n\n所以编译器提示：不能把 void 赋值给 tops::event（“cannot convert\
+  \ argument of incomplete type 'void'…”）。\n\n常见坑 & 解决套路\n1) 存储/地址空间相关\n\n症状：Kernel\
+  \ hang / Exception / 结果错乱\n根因：GCU 2.0 不能直接在设备端随意访问 L2/L3；mdspan 地址空间/形状配置不当；L1 对齐不满足。\n\
+  要点\n\n只能在 L1（私有） 上算；L3/L2 的数据必须走 DTE 搬运到 L1 再计算。\n\nmdspan 的地址空间要匹配：\n\nL3 → tops::Global；L2（shared）→\
+  \ tops::Shared；L1（private）→ tops::Private。\n\n写错（比如把 L3 当成 Private）= 高概率 hang。\n\
+  \n对齐：凡是要 vload/vstore 的 L1 缓冲，必须 __valigned__；长度、起始指针都要满足向量长度（例如 vfloat 一次 32 个\
+  \ float = 128B）。\n\n切片形状：mdspan(tops::Private, buf, m, n) 里 m,n 必须是 值（int/int32_t），不要传\
+  \ int*。\n\n我们踩过的坑：\n\nmdspan(..., (int32_t[2]){m_blk,n_blk}) ✅；\n\nmdspan(..., some_ptr_to_ints)\
+  \ ❌（报 static_cast from 'int' to 'int' is not allowed*）。\n\n2) DTE 使用（搬运）相关\n\n症状：Timeout\
+  \ / hang / 异常 / 结果错\n根因：DTE 未初始化、使用了错误的接口返回值、async 事件没等、shared dte 用法限制。\n要点\n\n\
+  初始化/销毁：\n\n用 tops::dte_scope s(ctx)（RAII）或 ctx.init(); ...; ctx.destroy();。忘 init/destroy\
+  \ 都可能 hang。\n\n接口返回类型：\n\ntranspose_deslice（同步版本）是 void；不能 event ev = transpose_deslice(...)。\n\
+  \n要拿 event 就用 _async 版本，并配合 tops::wait(ev)。\n\n顺序保障：异步 DMA 必须正确等待 event（否则读未完成数据）。\n\
+  \nshared dte 限制：一个 Block 里只有一个 thread 能做 L3↔L2 复制；容易造成性能/并发问题。没必要时用 私有 DTE。\n\n\
+  Debug 模式：kernel 里有 printf/assert 时 runtime 会强制同步，性能大幅下降；仅调试时开启。\n\n3) 向量化 & 对齐策略\n\
+  \n症状：偶发 MisMatch / 运行时异常\n根因：不对齐的 vload/vstore 或边界 tile 长度不是向量倍数。\n要点\n\n只在“完全对齐”时向量化：例如\
+  \ n_sz % vlength<vfloat>() == 0 且指针 __valigned__ 才上向量；否则走标量路径。\n\n边界 tile（例如 N,K\
+  \ 不是 32 的倍数）一律标量，保证正确性。\n\n小优化：满块路径向量化，边界回退标量，正确性优先。\n\n4) 矩阵布局/转置处理\n\n症状：中等规模\
+  \ MisMatch（我们当时就卡在这里）\n根因：transpose_deslice 与动态 tile 交互“挑剔”，或 LHS/RHS 的 layout 组装不一致。\n\
+  要点\n\n输入：不论 is_lhs_T/is_rhs_T，先通过 slice(+必要 transpose)把数据统一到 L1 的标准形（如 [m_sz,k_sz]\
+  \ 和 [k_sz,n_sz]）。\n\n输出：最稳的做法是先在 L1 手工转置到需要的 [n_sz,m_sz]，再用普通 deslice 写回；不要依赖 transpose_deslice（我们换成“手工转置\
+  \ + deslice”后才完全消掉 MisMatch）。\n\n硬件核 dot_general_fp32 只接受 M=16X，N=32X，K=32X；调用前务必保证\
+  \ tile 满足，否则不要调用（回退软件 GEMM）。\n\n5) 并行度与调度\n\n症状：大 case Timeout（>10s）\n根因：只沿 M 或\
+  \ N 一个方向分配线程，导致线程数不够、单线程工作量过大。\n要点\n\n线程覆盖全部 (M,N) tile：令 W = m_tiles * n_tiles，threads\
+  \ = min(W, maxThreadsPerMultiProcessor)（gcu210 通常 12）。\n\n连续分段分配（[0, W) 线性区间按线程均分），避免遗漏/重复。\n\
+  \n超大规模：K 环加双缓冲异步 DMA把搬运和计算叠起来（先保正确，再加速）。\n\n6) L1 资源与 tile 选择\n\n症状：Exception /\
+  \ 难以复现的错 / 性能忽高忽低\n根因：L1 使用超限、寄存器/私有内存压力大。\n要点\n\n保守 tile（我们最终用 M_T=16, N_T=64,\
+  \ K_T=128）：\n\n便于向量化（N_T=64 为 32 的倍数），\n\nL1 占用可控（多线程一起跑也稳）。\n\n需要 __valigned__\
+  \ 的 L1 缓冲都一次性定义好；避免每回合临时大栈。\n\n7) API & 测试环境细节\n\n症状：编译不过 / 链接不过 / 运行期宏冲突\n根因：评测框架重定义/禁用某些\
+  \ API，或编译选项不匹配。\n要点\n\n评测里可能把 topsMalloc/topsFree 宏重定向为 _topsMalloc_disabled（我们就踩过），因此不要在选手代码里随意分配设备内存；尽量使用\
+  \ L1 临时缓冲或由调用方提供。\n\ntopsGetDeviceProperties 带 [[nodiscard]]，可以读到就行，忽略返回值会发 warning，但不影响功能。\n\
+  \ngcu200/gcu210 限制不同：\n\nBlock 维度乘积：gcu200 ≤ 6，gcu210 ≤ 12；\n\ncooperative 网格乘积：gcu200\
+  \ ≤ 4，gcu210 ≤ 2。\n\n我们选择 1 个 block + ≤12 线程，最省心。\n\n8) 数值稳定性（统计类算子）\n\n症状：Var 之类在大规模或极值分布下出现轻微偏差\n\
+  根因：sum 与 sumsq 直接做差的消去误差\n要点\n\n更稳的做法：Welford/在线算法；或分块累加后再合并。\n\n精度受限时：保留两遍（先均值后方差），或用\
+  \ Kahan 补偿求和（视性能预算）。\n\n9) 调试定位方法\n\n先正确，后提速：全部同步 DTE + 标量边界路径；通过后逐步打开向量化、双缓冲等。\n\
+  \n缩小定位：强制 vec_ok=false 看 MisMatch 是否立刻消失（对齐问题）。\n\n输出路径 A/B：把“手工转置 + deslice”与 transpose_deslice\
+  \ AB 对比，只要 A 稳定就固定 A。\n\n并行度验证：打印 m_tiles/n_tiles/W/T（调试期），确认线程分配是否覆盖了整个输出网格。\n\n\
+  实战范式（模板化思路）\nA. 元素算子（如 SiLU）\n\n线程划分：threads = min(tiles, 12)；每线程处理一个或多个连续片段。\n\n\
+  L3→L1：slice 到对齐的 L1 缓冲（__valigned__）。\n\n计算：vfloat 快路径 + 标量回退。\n\nL1→L3：deslice。\n\
+  \n可加速：双缓冲异步搬运（safe 之后再上）。\n\nB. 归约算子（如 Var）\n\n分两级：线程内局部（L1）+ 线程间规约（L3/host）。\n\n\
+  数值稳健：尽量 Welford；或 sum/sumsq + 双精/补偿。\n\n小心：评测可能屏蔽 topsMalloc，不要在 device 端做临时大分配。\n\
+  \nC. GEMM（通吃 Transpose）\n\n统一输入布局到 L1 标准形：[m_sz,k_sz] 和 [k_sz,n_sz]。\n\nL1 GEMM：满块向量化、边界标量；或满足\
+  \ 16×32×32 的 tile 才调 dot_general_fp32。\n\n输出：手工转置 + deslice 最稳。\n\n并行：按 (m_tiles*n_tiles)\
+  \ 线性划分，连续分段给线程。\n\n可加速项：K 维双缓冲、减少转置次数（把重排融合到 DMA 路径）\n\n下面你完成这个算子的编程,这些你在写的时候要完全注意，只用GCU的范式开发，不要自己乱编函数，要严格按照GCU有的：\n"

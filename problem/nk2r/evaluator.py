@@ -24,6 +24,16 @@ def load_initial_peptides(path="initial_population.txt"):
                 seqs[sid] = seq
     return seqs
 
+VALID_AMINO_ACIDS = set("ACDEFGHIKLMNPQRSTVWY")
+
+def sanitize_sequence(seq: str) -> str:
+    """
+    将序列转为大写，并删除所有非法氨基酸字符
+    """
+    seq = seq.upper()
+    return "".join([aa for aa in seq if aa in VALID_AMINO_ACIDS])
+
+
 def generate_initial_population(config, seed=42, init_file="/root/src/MOLLM/problem/nk2r/initial_population.txt"):
     np.random.seed(seed)
     random.seed(seed)
@@ -58,7 +68,7 @@ def calc_identity(seq1: str, seq2: str) -> float:
     aln = pairwise2.align.globalxx(seq1, seq2, one_alignment_only=True)[0]
     matches = aln[2]     # 匹配的字符数
     aln_len = aln[4]     # 对齐后的总长度
-    return matches / aln_len * 100.0
+    return matches / aln_len 
 
 
 def cal_similarity(candidate_seq: str) -> float:
@@ -139,8 +149,9 @@ class RewardingSystem:
         self.config = config
     
     def evaluate(self,items):
-        for item in items:
-            peptide = item.value
+        for i,item in enumerate(items):
+            peptide = sanitize_sequence(item.value)
+            
             simiarity = cal_similarity(peptide)
             pass_mmseqs = check_similarity(peptide)
             pass_len = len(peptide) <=40
@@ -165,8 +176,9 @@ class RewardingSystem:
                 },
                 'overall_score': iptm # only this one cause passing mmseqs is enough
             }
-            print(f'this item {item.value} result:',results_dict)
+            print(f' {i}th item {item.value} result:',results_dict)
             item.assign_results(results_dict)
+            item.value = peptide
         log_dict = {}
         log_dict['invalid_num'] = 0
         log_dict['repeated_num'] = 0 # default is 0. If you remove the repeated items, then fill this attribute with the amount.

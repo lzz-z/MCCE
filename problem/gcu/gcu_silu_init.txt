@@ -1,0 +1,353 @@
+<candidate>
+#include <tops/tops_runtime.h>
+#include <tops.h>
+
+// ===================== Device Kernel (XFAST) =====================
+__global__ void kernel_silu_xfast(float *inp, float *out, size_t nr_elems) {
+  const int tid = threadIdx.z * (blockDim.x * blockDim.y)
+                + threadIdx.y * blockDim.x + threadIdx.x;
+  const int T   = blockDim.x * blockDim.y * blockDim.z;
+
+  if (nr_elems == 0) return;
+
+  // ---- 两路 DTE：读/写分别双缓冲，异步流水 ----
+  tops_dte_ctx_t ctx_ld[2];
+  tops_dte_ctx_t ctx_st[2];
+  for (int i = 0; i < 2; ++i) { ctx_ld[i].init(); ctx_st[i].init(); }
+
+  // ---- 每线程负责的区间 ----
+  const size_t elems_per_thread = (nr_elems + T - 1) / T;
+  const size_t start = (size_t)tid * elems_per_thread;
+  size_t end = start + elems_per_thread;
+  if (end > nr_elems) end = nr_elems;
+  if (start >= end) {
+    for (int i = 0; i < 2; ++i) { ctx_ld[i].destroy(); ctx_st[i].destroy(); }
+    return;
+  }
+
+  // ---- L1 双缓冲（更大 tile 避免 DTE 过度碎片化）----
+  static constexpr int TILE = 256;   // 256 elems = 1KB；双缓冲 2KB/线程
+  __valigned__ float buf0[TILE];
+  __valigned__ float buf1[TILE];
+  const int VLEN = tops::vlength<vfloat>(); // 32 floats (128B)
+
+  // 记录缓冲对应的 L3 起始与长度
+  size_t pos[2] = {0, 0};
+  int    len[2] = {0, 0};
+
+  // 事件：load/store
+  tops::event ev_ld[2], ev_st[2];
+  bool st_inflight[2] = {false, false};
+
+  // 预取首块 -> buf0
+  int cur = 0;
+  pos[cur] = start;
+  len[cur] = (int)((end - pos[cur]) < (size_t)TILE ? (end - pos[cur]) : (size_t)TILE);
+  ev_ld[cur] = tops::memcpy_async(ctx_ld[cur],
+                  tops::mdspan(tops::Private, buf0, len[cur]),
+                  tops::mdspan(tops::Global,  inp + pos[cur], len[cur]));
+  size_t load_pos = pos[cur] + len[cur];
+
+  while (true) {
+    // 等待当前缓冲加载完成；如果该缓冲上一次有写回在飞，先确保落地
+    if (st_inflight[cur]) tops::wait(ev_st[cur]);
+    tops::wait(ev_ld[cur]);
+
+    // 预取下一块（若有）到另一缓冲
+    int next = 1 - cur;
+    bool has_next = (load_pos < end);
+    if (has_next) {
+      pos[next] = load_pos;
+      len[next] = (int)((end - load_pos) < (size_t)TILE ? (end - load_pos) : (size_t)TILE);
+      ev_ld[next] = tops::memcpy_async(ctx_ld[next],
+                        tops::mdspan(tops::Private, next ? buf1 : buf0, len[next]),
+                        tops::mdspan(tops::Global,  inp + pos[next], len[next]));
+      load_pos += len[next];
+    }
+
+    // ---- L1 计算：SiLU(x) = x * sigmoid(x) ----
+    float* inout = (cur ? buf1 : buf0); // 直接覆盖到同一 L1 缓冲
+    const int tile = len[cur];
+
+    int j = 0;
+    for (; j + VLEN <= tile; j += VLEN) {
+      const auto vx   = tops::vload<vfloat>(inout + j);
+      const auto vsig = tops::vsigmoid(vx);
+      const auto vout = tops::vmul<vfloat>(vx, vsig);
+      tops::vstore(vout, inout + j);
+    }
+    for (; j < tile; ++j) {
+      const float x = inout[j];
+      inout[j] = x / (1.0f + expf(-x));
+    }
+
+    // 异步写回当前块
+    ev_st[cur] = tops::memcpy_async(ctx_st[cur],
+                   tops::mdspan(tops::Global,  out + pos[cur], tile),
+                   tops::mdspan(tops::Private, inout,          tile));
+    st_inflight[cur] = true;
+
+    if (!has_next) break; // 最后一块
+    cur = next;           // 切到下一缓冲
+  }
+
+  // 等最后写回完成再复用/退场
+  if (st_inflight[0]) tops::wait(ev_st[0]);
+  if (st_inflight[1]) tops::wait(ev_st[1]);
+
+  for (int i = 0; i < 2; ++i) { ctx_ld[i].destroy(); ctx_st[i].destroy(); }
+}
+
+// ===================== Host API (XFAST) =====================
+void GCU_SILU(float * __restrict dev_inp,
+              float * __restrict dev_out,
+              const int nr_elems) {
+  if (nr_elems <= 0) return;
+
+  // 目标：尽量让每线程 ≥ 4 个 TILE 以发挥异步流水优势
+  const int TILE = 256;
+  int maxT = 12; // 按你的要求默认 12（gcu210），仍用属性夹一下防止跑到 gcu200
+  topsDeviceProp_t prop;
+  topsError_t perr = topsGetDeviceProperties(&prop, 0);
+  if (perr == topsSuccess && prop.maxThreadsPerMultiProcessor < maxT)
+    maxT = prop.maxThreadsPerMultiProcessor;
+
+  // 启发式：T ≈ clamp(1, maxT, nr_elems / (4 * TILE))
+  int T = nr_elems / (4 * TILE);
+  if (T < 1) T = 1;
+  if (T > maxT) T = maxT;
+
+  // 对于极小输入，强制 1 线程避免调度开销
+  if (nr_elems < TILE) T = 1;
+
+  kernel_silu_xfast<<<dim3(1,1,1), dim3(T,1,1)>>>(dev_inp, dev_out, (size_t)nr_elems);
+
+  // 消费 nodiscard
+  topsError_t err = topsGetLastError(); (void)err;
+  topsError_t sync_err = topsDeviceSynchronize(); (void)sync_err;
+}
+</candidate>
+
+<score>
+63.21
+</score>
+<log>testcase0 -> Passed
+testcase1 -> Passed
+testcase2 -> Passed
+testcase3 -> Passed
+testcase4 -> Passed
+testcase5 -> Passed
+testcase6 -> Passed
+testcase7 -> Passed
+testcase8 -> Passed
+testcase9 -> Passed</log>
+
+
+<candidate>
+__attribute__((global, cooperative)) void kernel_silu(float *inp, float *out, size_t elems_per_thread) {
+    tops_dte_ctx_t ctx;
+    tops::dte_scope scope(ctx);
+
+    int thread_idx = threadIdx.x;   // ✅ 用 CUDA 风格
+    static const size_t L1_BUFFER_LEN = 128;
+
+    __valigned__ float l1_buf_in[L1_BUFFER_LEN];
+    __valigned__ float l1_buf_out[L1_BUFFER_LEN];
+
+    tops::mdspan l1_in(tops::Private, l1_buf_in, L1_BUFFER_LEN);
+    tops::mdspan l1_out(tops::Private, l1_buf_out, L1_BUFFER_LEN);
+
+    auto pos_start = thread_idx * elems_per_thread;
+    auto pos_end   = pos_start + elems_per_thread;
+
+    for (size_t i = pos_start; i < pos_end; i += L1_BUFFER_LEN) {
+        size_t len = (i + L1_BUFFER_LEN <= pos_end) ? L1_BUFFER_LEN : (pos_end - i);
+
+        tops::mdspan g_in(tops::Global, inp + i, len);
+        tops::mdspan g_out(tops::Global, out + i, len);
+
+        tops::memcpy(ctx, l1_in, g_in);
+
+        for (size_t j = 0; j < len; ++j) {
+            float x = l1_buf_in[j];
+            float sig = 1.0f / (1.0f + expf(-x));
+            l1_buf_out[j] = x * sig;
+        }
+
+        tops::memcpy(ctx, g_out, l1_out);
+    }
+}
+
+
+void GCU_SILU(float * __restrict dev_inp,
+              float * __restrict dev_out,
+              const int nr_elems) {
+    static const size_t blocks = 1;
+    static const size_t threads = 12; // 简单起见
+    size_t elems_per_thread = (nr_elems + threads - 1) / threads;
+
+    kernel_silu<<<blocks, threads>>>(dev_inp, dev_out, elems_per_thread);
+}
+</candidate>
+<score>
+59.13
+</score>
+<log>testcase0 -> Passed
+testcase1 -> Passed
+testcase2 -> Passed
+testcase3 -> Passed
+testcase4 -> Passed
+testcase5 -> Passed
+testcase6 -> Passed
+testcase7 -> Passed
+testcase8 -> Passed
+testcase9 -> Passed</log>
+
+
+<candidate>
+#include <tops/tops_runtime.h>
+#include <tops.h>
+
+// ===================== Device Kernel =====================
+__global__ void kernel_silu_fast(float *inp, float *out, size_t nr_elems) {
+  const int tid = threadIdx.z * (blockDim.x * blockDim.y)
+                + threadIdx.y * blockDim.x + threadIdx.x;
+  const int T   = blockDim.x * blockDim.y * blockDim.z;
+
+  if (nr_elems == 0) return;
+
+  // ---- 两路 DTE：读/load 与 写/store，做双缓冲流水 ----
+  tops_dte_ctx_t ctx_ld[2];
+  tops_dte_ctx_t ctx_st[2];
+  for (int i = 0; i < 2; ++i) { ctx_ld[i].init(); ctx_st[i].init(); }
+
+  // ---- 每线程负责的区间 ----
+  const size_t elems_per_thread = (nr_elems + T - 1) / T;
+  const size_t start = (size_t)tid * elems_per_thread;
+  size_t end = start + elems_per_thread;
+  if (end > nr_elems) end = nr_elems;
+  if (start >= end) {
+    for (int i = 0; i < 2; ++i) { ctx_ld[i].destroy(); ctx_st[i].destroy(); }
+    return;
+  }
+
+  // ---- L1 双缓冲（对齐以供 vload/vstore）----
+  __valigned__ float in0[128],  in1[128];
+  __valigned__ float out0[128], out1[128];
+  const int VLEN = tops::vlength<vfloat>(); // 32 for float
+
+  // 记录每个缓冲对应的 L3 起始位置与长度
+  size_t pos[2] = {0, 0};
+  int    len[2] = {0, 0};
+
+  // 事件与写入中的标记
+  tops::event ev_ld[2], ev_st[2];
+  bool st_inflight[2] = {false, false};
+
+  // 预取首块到 buf0
+  int cur = 0;
+  pos[cur] = start;
+  len[cur] = (int)((end - pos[cur]) < 128 ? (end - pos[cur]) : 128);
+  ev_ld[cur] = tops::memcpy_async(ctx_ld[cur],
+                  tops::mdspan(tops::Private, in0, len[cur]),
+                  tops::mdspan(tops::Global,  inp + pos[cur], len[cur]));
+  size_t load_pos = pos[cur] + len[cur];
+
+  while (true) {
+    // 轮到当前缓冲：先确保上一次该缓冲的写回已完成（避免覆盖 outbuf）
+    if (st_inflight[cur]) tops::wait(ev_st[cur]);
+    // 等待当前输入块准备好
+    tops::wait(ev_ld[cur]);
+
+    // 预取下一块到另一路缓冲（如果还有）
+    int next = 1 - cur;
+    bool has_next = (load_pos < end);
+    if (has_next) {
+      pos[next] = load_pos;
+      len[next] = (int)((end - load_pos) < 128 ? (end - load_pos) : 128);
+      ev_ld[next] = tops::memcpy_async(ctx_ld[next],
+                         tops::mdspan(tops::Private, next ? in1 : in0, len[next]),
+                         tops::mdspan(tops::Global,  inp + pos[next], len[next]));
+      load_pos += len[next];
+    }
+
+    // ---- 计算：out = x * sigmoid(x) ----
+    float* inbuf  = (cur ? in1 : in0);
+    float* outbuf = (cur ? out1 : out0);
+    const int tile = len[cur];
+
+    int j = 0;
+    for (; j + VLEN <= tile; j += VLEN) {
+      const auto vx   = tops::vload<vfloat>(inbuf + j);
+      const auto vsig = tops::vsigmoid(vx);         // σ(x)
+      const auto vout = tops::vmul<vfloat>(vx, vsig); // x * σ(x)
+      tops::vstore(vout, outbuf + j);
+    }
+    // 尾部标量
+    for (; j < tile; ++j) {
+      const float x = inbuf[j];
+      // SiLU = x * sigmoid(x) = x / (1 + exp(-x))
+      outbuf[j] = x / (1.0f + expf(-x));
+    }
+
+    // 异步写回当前块
+    ev_st[cur] = tops::memcpy_async(ctx_st[cur],
+                    tops::mdspan(tops::Global,  out + pos[cur], tile),
+                    tops::mdspan(tops::Private, outbuf,          tile));
+    st_inflight[cur] = true;
+
+    if (!has_next) break; // 没有下一块了，退出循环
+    cur = next;           // 切换到下一缓冲
+  }
+
+  // 等最后的写回
+  if (st_inflight[0]) tops::wait(ev_st[0]);
+  if (st_inflight[1]) tops::wait(ev_st[1]);
+
+  // 释放 DTE
+  for (int i = 0; i < 2; ++i) { ctx_ld[i].destroy(); ctx_st[i].destroy(); }
+}
+
+// ===================== Host API =====================
+void GCU_SILU(float * __restrict dev_inp,
+              float * __restrict dev_out,
+              const int nr_elems) {
+  if (nr_elems <= 0) return;
+
+  // 线程数：优先使用设备上限（gcu200=6, gcu210=12），也要确保每线程至少有一个 128 元素 tile
+  int maxT = 12; // 安全默认
+  topsDeviceProp_t prop;
+  topsError_t perr = topsGetDeviceProperties(&prop, 0);
+  if (perr == topsSuccess) maxT = prop.maxThreadsPerMultiProcessor;
+
+  int T;
+  if (nr_elems < 128) T = 1;
+  else if (nr_elems < 128 * maxT) {
+    T = (nr_elems + 127) / 128;
+    if (T < 1) T = 1;
+    if (T > maxT) T = maxT;
+  } else {
+    T = maxT;
+  }
+
+  kernel_silu_fast<<<dim3(1,1,1), dim3(T,1,1)>>>(dev_inp, dev_out, (size_t)nr_elems);
+
+  // 处理 nodiscard
+  topsError_t err = topsGetLastError(); (void)err;
+  topsError_t sync_err = topsDeviceSynchronize(); (void)sync_err;
+}
+
+</candidate>
+<score>
+61.31
+</score>
+<log>testcase0 -> Passed
+testcase1 -> Passed
+testcase2 -> Passed
+testcase3 -> Passed
+testcase4 -> Passed
+testcase5 -> Passed
+testcase6 -> Passed
+testcase7 -> Passed
+testcase8 -> Passed
+testcase9 -> Passed</log>

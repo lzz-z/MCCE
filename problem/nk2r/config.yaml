@@ -27,7 +27,7 @@ prompt_info_path: /root/src/MOLLM/problem/nk2r/prompt_info.yaml
 evalutor_path: problem.nk2r.evaluator
 
 optimization: 
-  pop_size: 50
+  pop_size: 25
   eval_budget: 5000
 
 

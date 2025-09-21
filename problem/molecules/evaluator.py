@@ -19,7 +19,7 @@ def get_evaluation(evaluate_metric, smiles):
 from tdc import Oracle, Evaluator
 
 def generate_initial_population(config,seed):
-    with open('/root/src/MOLLM/data/data_goal5.json','r') as f:
+    with open('/root/nian/MOLLM/data/data_goal5.json','r') as f:
         data = json.load(f)
     data_type = f'random{seed-41}' # initial_pop: "random1" # best100, worst100, random1 ~ 5
     data_type = 'random1'
@@ -55,6 +55,7 @@ class RewardingSystem:
         }
         self.use_tqdm = use_tqdm
         self.chunk_size=chunk_size
+        self.history_smiles= []
 
     def get_reward(self, reward_name, items):
         results = []
@@ -66,7 +67,7 @@ class RewardingSystem:
         return np.concatenate(results)
     
     def evaluate(self,items):
-        items, failed_num,repeated_num = sanitize(items)
+        items, failed_num,repeated_num = self.sanitize(items)
         original_results = {}
         transformed_results = {}
         log_dict = {}
@@ -109,24 +110,23 @@ class RewardingSystem:
         else:
             raise NotImplementedError(f'{obj} is not defined for optimizaion direction! Please define it in "optimization_direction" in your yaml config')
 
-def sanitize(tmp_offspring):
-    offspring = []
-    failed_num = 0
-    repeated_num = 0
-    smiles_this_gen = []
-    for child in tmp_offspring:
-        mol = Chem.MolFromSmiles(child.value) 
-        if mol is None: # check if valid
-            failed_num += 1
-        else:
-            child.value = Chem.MolToSmiles(mol,canonical=True)
-            # check if repeated
-            if child.value in smiles_this_gen:
-                repeated_num +=1
+    def sanitize(self,tmp_offspring):
+        offspring = []
+        failed_num = 0
+        repeated_num = 0
+        for child in tmp_offspring:
+            mol = Chem.MolFromSmiles(child.value) 
+            if mol is None: # check if valid
+                failed_num += 1
             else:
-                smiles_this_gen.append(child.value)
-                offspring.append(child)
-    return offspring, failed_num,repeated_num
+                child.value = Chem.MolToSmiles(mol,canonical=True)
+                # check if repeated
+                if child.value in self.history_smiles:
+                    repeated_num +=1
+                else:
+                    self.history_smiles.append(child.value)
+                    offspring.append(child)
+        return offspring, failed_num,repeated_num
     
 def morgan_similarity(items):
     results = [_morgan_similarity(i[0],i[1]) for i in items]

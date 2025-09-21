@@ -1,6 +1,7 @@
 import argparse
 from model.MOLLM import MOLLM  # Ensure that MOLLM class is correctly imported from its respective module
-
+from rdkit import RDLogger
+RDLogger.DisableLog('rdApp.*')
 def main(arg_list=None):
     # Set up argument parser
     parser = argparse.ArgumentParser(description='Run MOLLM with a configuration file')
@@ -12,6 +13,8 @@ def main(arg_list=None):
     parser.add_argument('--seed', type=int, default=42, help='random seed')
     parser.add_argument('--objectives', type=str, nargs='+', default=None)
     parser.add_argument('--directions', type=str, nargs='+', default=None)
+    parser.add_argument('--num_offspring', type=int, default=2)
+    parser.add_argument('--save_suffix',type=str,default='')
     # Parse the arguments from the command line
     if arg_list:
         return parser.parse_args(arg_list)
@@ -19,7 +22,7 @@ def main(arg_list=None):
 
     # Pass the config file path to MOLLM and run it
     #args.eval = True
-    mollm = MOLLM(args.config,resume=args.resume,eval=args.eval,seed=args.seed,objectives=args.objectives,directions=args.directions)
+    mollm = MOLLM(args,args.config,resume=args.resume,eval=args.eval,seed=args.seed,objectives=args.objectives,directions=args.directions)
     
     if args.eval:
         print(f'start evaluation of {args.config}')

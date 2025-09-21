@@ -1,16 +1,20 @@
 #!/bin/bash
 
-# Define the Python scripts to run in the order
-commands=(
-  "python main.py molecules/config.yaml --seed 42"
-  "python main.py molecules/config.yaml --seed 43"
-  "python main.py molecules/config.yaml --seed 44"
-  "python main.py molecules/config.yaml --seed 45"
-  "python main.py molecules/config.yaml --seed 46"
+# Seeds
+seeds=(42 43 44)
+
+# Config files
+configs=(
+  #"molecules/config_exp7.yaml"
+  #"molecules/config_exp9.yaml"
+  "molecules/config.yaml"
 )
 
-# Print and execute each command
-for cmd in "${commands[@]}"; do
-  echo "Executing: $cmd"   # Print the command
-  $cmd                    # Execute the command
+# Loop over configs and seeds
+for cfg in "${configs[@]}"; do
+  for seed in "${seeds[@]}"; do
+    cmd="python main.py $cfg --seed $seed"
+    echo "Executing: $cmd"
+    $cmd
+  done
 done

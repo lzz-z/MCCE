@@ -40,7 +40,7 @@ class ConfigLoader:
         return "\n".join(lines)
 
 class MOLLM:
-    def __init__(self, config='base.yaml',resume=False,eval=False,seed=42,objectives=None,directions=None):
+    def __init__(self, args,config='base.yaml',resume=False,eval=False,seed=42,objectives=None,directions=None):
         if isinstance(config,str):
             self.config = ConfigLoader(config)
         else:
@@ -52,6 +52,9 @@ class MOLLM:
             assert directions is not None
             self.config.config['optimization_direction'] = directions
             print('goals, directs',self.config.get('goals'),self.config.get('optimization_direction'))
+        if args.num_offspring is not None:
+            self.config.config['num_offspring'] = args.num_offspring
+        self.config.config['save_suffix'] += args.save_suffix
         self.property_list = self.config.get('goals')
         if not eval:
             module_path = self.config.get('evalutor_path')  # e.g., "molecules"

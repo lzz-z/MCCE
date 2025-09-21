@@ -27,7 +27,7 @@ class Prompt:
         self.pure_experience = None
         self.exp_times = 0
         self.experience_prob = config.get('model.experience_prob')
-        self.num_offspring = self.config.get('optimization.num_offspring',default=2)
+        self.num_offspring = self.config.get('num_offspring',default=2)
         with open(config.get("prompt_info_path"), "r") as yaml_file:
             self.info = yaml.safe_load(yaml_file)
             if self.config.get('n_circles',default=False):

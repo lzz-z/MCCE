@@ -72,7 +72,7 @@ class MOO:
         self.record_dict['au_history_smiles'] = []
         self.time_step = 0
         self.start_time = time.time()
-        self.num_offspring = self.config.get('optimization.num_offspring',default=2)
+        self.num_offspring = self.config.get('num_offspring',default=2)
 
     def generate_initial_population(self, n):
         module_path = self.config.get('evalutor_path')  # e.g., "molecules"
@@ -99,6 +99,7 @@ class MOO:
         #assert False
         response = self.llm.chat(prompt)
         new_smiles = extract_smiles_from_string(response)
+        
         return [self.item_factory.create(smile) for smile in new_smiles],prompt,response
 
     def evaluate(self,pops):
@@ -356,29 +357,6 @@ class MOO:
         print(f'=======> total running time { (time.time()-start_time)/3600 :.2f} hours <=======')
         
         return init_pops,population  # 计算效率
-    '''
-    def sanitize(self,tmp_offspring,record=True):
-        return tmp_offspring ###
-        offspring = []
-        smiles_this_gen = []
-        for child in tmp_offspring:
-            mol = Chem.MolFromSmiles(child.value) 
-            if mol is None: # check if valid
-                if record:
-                    self.failed_num += 1
-            else:
-                child.value = Chem.MolToSmiles(mol,canonical=True)
-                # check if repeated
-                if child.value in self.history_moles or child.value in smiles_this_gen:
-                    if record:
-                        self.repeat_num +=1
-                    else:
-                        offspring.append(child)
-                else:
-                    smiles_this_gen.append(child.value)
-                    offspring.append(child)
-        return offspring
-    '''
 
     def record(self, tmp_offspring: list, buffer_type: str) -> list:
         """
@@ -441,10 +419,10 @@ class MOO:
         Returns:
         - list: Evaluated and recorded offspring.
         """
-        parents = [random.sample(population, 2) for i in range(offspring_times)]
+        parents = [random.sample(population, self.num_offspring) for i in range(offspring_times)]
         parallel = True
         if parallel:
-            with concurrent.futures.ProcessPoolExecutor() as executor:
+            with concurrent.futures.ThreadPoolExecutor() as executor:
                 futures = [executor.submit(self.mating, parent_list=parent_list) for parent_list in parents]
                 #results = [future.result() for future in futures]
                 #children, prompts, responses = zip(*results) #[[item,item],[item,item]] # ['who are you value 1', 'who are you value 2'] # ['yes, 'no']

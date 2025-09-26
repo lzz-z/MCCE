@@ -15,7 +15,6 @@ import multiprocessing
 def convert2str(r_cos,z_sin):
     r_cos = np.array2string(r_cos, separator=', ', precision=8, suppress_small=True, max_line_width=1000)
     z_sin = np.array2string(z_sin, separator=', ', precision=8, suppress_small=True, max_line_width=1000)
-
     # 拼接为完整字符串
     final_string = (
     "r_cos = np.array(" + r_cos + ")\n\n"
@@ -38,7 +37,7 @@ def _evaluate_one_static(item):
         exec(item.value, {"np": np}, scope)
         r_cos = scope['r_cos']
         z_sin = scope['z_sin']
-        assert r_cos.shape == (5, 9) and z_sin.shape == (5, 9)
+        assert r_cos.shape == z_sin.shape 
 
         result, metrics = evaluate_surface(r_cos, z_sin)
         results_dict = {
@@ -51,6 +50,7 @@ def _evaluate_one_static(item):
                 'feasibility':result.feasibility,
             },
             'constraint_results': {
+                'current_shape':r_cos.shape,
                 'edge_rotational_transform_over_n_field_periods':metrics.edge_rotational_transform_over_n_field_periods,
                 'qi':metrics.qi,
                 'edge_magnetic_mirror_ratio':metrics.edge_magnetic_mirror_ratio,
@@ -104,7 +104,7 @@ class RewardingSystem:
         return valid_items, log_dict
 
 def generate_initial_population(config,seed=42,n_sample=100):
-    with open('/root/src/MOLLM/problem/simple2build/init_items.pkl','rb') as f:
+    with open('/root/nian/MOLLM/problem/simple2build/init_items.pkl','rb') as f:
         items = pickle.load(f)
     reward_system = RewardingSystem(config)
     for i in range(len(items)):
@@ -160,7 +160,7 @@ def get_database(config,seed=42,n_sample=100):
     df['feasibility'] = feasibilities
     df = df.sort_values('feasibility',ascending=True).reset_index(drop=True)
     '''
-    df = pd.read_csv('/root/src/MOLLM/problem/simple2build/simple2build_databse.csv')
+    df = pd.read_csv('/root/nian/MOLLM/problem/simple2build/simple2build_databse.csv')
     df= df[:n_sample]
     items = []
     for _,row in df.iterrows():
@@ -184,7 +184,6 @@ def get_database(config,seed=42,n_sample=100):
                 'vacuum_well':row['metrics.vacuum_well'],
                 'flux_compression_in_regions_of_bad_curvature':row['metrics.flux_compression_in_regions_of_bad_curvature']
             },
-            
         }
         results_dict['overall_score'] = 0
         r_cos = np.stack(row['boundary.r_cos'])

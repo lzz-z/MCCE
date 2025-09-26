@@ -11,7 +11,7 @@ model:
   # name2: zgca,gpt-4o-2024-05-13
   prompt_module: Prompt
   #temperature: 1.
-  experience_prob: 0.3
+  experience_prob: 0.5
   crossover_prob: 0.8
   mutation_prob: 0.2 
   explore_prob: 0. 

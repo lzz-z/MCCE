@@ -61,6 +61,7 @@ class MOO:
         self.failed_num = 0
         self.generated_num = 0
         self.llm_calls = 0
+        self.start = True
         self.patience = 0
         self.old_score = 0
         self.early_stopping = False
@@ -251,7 +252,7 @@ class MOO:
             f'unique top 100:{len(np.unique([i.value for i in top100_mols]))} | '
             f'input_tokens: {self.llm.input_tokens} | '
             f'output_tokens: {self.llm.output_tokens} | '
-            f'running_time: {(time.time()-self.start_time)/3600:.3f} h'
+            f'running_time: {(time.time()-self.start_time)/3600:.3f} h | '
             f'div: {diversity_top100:.4f}'
             )
 
@@ -308,6 +309,7 @@ class MOO:
                 population = self.evaluate(population) # including removing invalid and repeated candidates
             self.log_results()
             init_pops = copy.deepcopy(population)
+            assert False
         data = {
                 'history':self.history,
                 'init_pops':init_pops,
@@ -450,6 +452,8 @@ class MOO:
                 self.llm_calls += 1
         
         tmp_offspring = []
+        if self.start:
+            self.start=False
         for child_pair in children:
             self.generated_num += len(child_pair)
             tmp_offspring.extend(child_pair)

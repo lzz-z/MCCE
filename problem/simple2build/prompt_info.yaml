@@ -18,8 +18,10 @@ description: 'This optimization problem is a problem to evaluate stellarator des
   r_sin contains the sine coefficients for the radial component.
   z_sin contains the sine coefficients for the vertical component.
   z_cos contains the cosine coefficients for the vertical component.
-  The indices m and n specify the resolution of the surface in the poloidal and toroidal directions. In this problem, m = 5 and n = 9, 
-  meaning the surface includes up to 5 poloidal modes and 9 toroidal modes. Therefore, each coefficient array, including r_cos and z_sin, has shape (5, 9).'
+  The indices L and M specify the resolution of the boundary surface in the radial and poloidal directions.
+  Typically, L ranges from about 3 to 12 and M from about 6 to 20, M must be an odd.
+  Larger values allow more geometric complexity.Your just need to make sure the coefficient arrays r_cos and z_sin have the same shape (L, M).
+  Typical choices for the mode numbers (L, M) are: Low: (3–5, 6–10) middle: (5–8, 9–15) high: (8–12, 15–20)'
 
 # This part is important, you should set your output format here, and probably give an simple example. The <candidate></candidate> is fixed.
 example_output: 'Each output new candidate must start with <candidate> and end with
@@ -32,28 +34,14 @@ example_output: 'Each output new candidate must start with <candidate> and end w
 
 # Optional mutation and crossover instrution, helpful for better operation, you should start with:"Example operations include: "
 mutation_instruction: 'Example operations include:
-  1. Largely change the values.
-  2. Scale low-order modes:
-  Randomly scale the amplitudes of all Fourier modes where the poloidal index is 1 or the toroidal index is 1. This controls the basic elliptical shape of the surface and adjusts its overall radial and vertical size smoothly.
-  3. Inject high-frequency noise:
-  Introduce small random perturbations into higher-order poloidal and toroidal modes (e.g., modes where both indices are 3 or higher). This adds fine surface ripples or local shape complexities without breaking physical realism.
-  4. Apply a toroidal phase twist:
-  Apply a small phase rotation to the toroidal modes with index 1. This simulates a slight twisting or rotation of the field shape in the toroidal direction, helping the model explore symmetric variants of the current configuration.
-  5. Modulate cross-sectional elongation:
-  Increase or decrease the coefficients that correspond to m=2 poloidal modes. This alters the vertical stretching of the surface cross-section, which is closely related to elongation.
-  6. Add localized φ-direction perturbation:
-  Randomly choose a toroidal index and introduce slight perturbations to all poloidal modes at that index. This simulates a localized deformation or bump on the surface at a specific toroidal slice.
+  1. Change the values.
+  2. Do not be limited be shape (5,9), you can change the shape of r_cos and z_sin
+  3. if current total score stuck at <0.44 you may change the shape of r_cos and z_sin
   '
 crossover_instruction: 'Example operations include:
-  1. Largely exchange the values.
-  2. Swap low and high poloidal mode blocks:
-  Create a new individual by copying low-poloidal-mode coefficients (e.g., m ≤ 2) from one parent and high-poloidal-mode coefficients (e.g., m > 2) from another. This blends coarse global shape from one parent with finer features from the other.
-  3. Weighted averaging of parents:
-  Generate a child by taking a weighted average of the Fourier coefficients from both parents, where the weighting is randomly sampled between 30% and 70%. This smooth interpolation allows exploration between known good configurations.
-  4. Symmetric-mode-only recombination:
-  Combine only the coefficients that preserve stellarator symmetry from both parents, and discard or zero out the others. This ensures that the child retains physically valid symmetric structure.
-  5. Top-mode inheritance:
-  Identify the three most dominant Fourier modes (by amplitude) from one parent and copy them directly to the child. The remaining coefficients are inherited from the other parent. This preserves the key geometric features of one parent while introducing variability.
+  1. Exchange the values.
+  2. Do not be limited be shape (5,9), you can change the shape of r_cos and z_sin 
+  3. if current total score stuck at <0.44 you may change the shape of r_cos and z_sin
   '
 
 # Optional, some extra requirements you would like to achieve

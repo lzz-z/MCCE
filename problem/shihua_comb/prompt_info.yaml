@@ -1,0 +1,61 @@
+# Write a description for your problem
+description: >
+  The problem is a pump scheduling optimization task. The system must generate
+  a valid schedule in CSV format that specifies start_time, end_time, and
+  combination_id for pump operations. The schedule must obey the following
+  constraints:
+
+  - Task parameters (from task001.json):
+    * task_id: test_01
+    * required total volume: 25000 m3
+    * start time: 2023-11-01T00:00:00
+    * allowed flow range: [1000, 2000] m3/h
+    * shifts:
+        - Night: 0–9
+        - Day: 9–21
+        - Night extension: 21–24
+    * max switches per shift: 2
+
+  - Pump combinations (from pump_combinations.csv):
+    - "1#: flow 1055 m3/h, power 1102 kW"
+    - "3#: flow 1113 m3/h, power 1120 kW"
+    - "1#&2#: flow 1735 m3/h, power 2222 kW"
+    - "1#&3#: flow 1880 m3/h, power 2352 kW"
+    - "2#&3#: flow 1832 m3/h, power 2370 kW"
+    - "1#&2#&3#: flow 2302 m3/h, power 3472 kW (NOT allowed since >2000 m3/h)"
+
+  - Electricity price (from electricity_price.csv, yuan/kWh):
+    * 0–8: 0.211267 (low)
+    * 8–10: 0.552604 (mid)
+    * 10–14: 0.937986 (peak)
+    * 14–19: 0.552604 (mid)
+    * 19–24: 0.937986 (peak)
+
+  A valid solution must:
+    * Start exactly at 2023-11-01T00:00:00
+    * hour must be in 0..23
+    * Deliver exactly 25000 m3 within the time window
+    * Use only combinations with flow between 1000–2000 m3/h
+    * Ensure continuous intervals without gaps or overlaps
+    * Not exceed 2 switches in any shift
+  The objective is to minimize the total electricity cost.
+
+# This part is important, you should set your output format here, and probably give an simple example. The <candidate></candidate> is fixed.
+example_output: 'Each output new candidate must start with <candidate> and end with
+  </candidate> in string csv format. Example one output: <candidate>start_time,end_time,combination_id\n2023-11-01T00:00:00,2023-11-01T08:00:00,1#&3#\n2023-11-01T08:00:00,2023-11-01T16:56:55.633423,3#\n</candidate>'
+
+# Optional mutation and crossover instrution, helpful for better operation, you should start with:"Example operations include: "
+mutation_instruction: 'Example operations include:
+  Mutate the candidate by slightly varying the number of switches or adjusting time intervals.
+  '
+crossover_instruction: 'Example operations include:
+  Produce a new candidate by mixing segments from two different schedules while keeping valid continuity.'
+
+# Optional, some extra requirements you would like to achieve
+other_requirements: Candidate schedules should remain simple, with reasonable interval lengths,
+  avoiding excessive fragmentation. Always wrap the output inside
+  <candidate></candidate> tags and use CSV string format with columns
+  start_time,end_time,combination_id. The main priority is feasibility and
+  lower total cost.
+
+cost: total cost by yuan, smaller is better

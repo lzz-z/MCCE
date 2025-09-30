@@ -42,9 +42,14 @@ class Prompt:
             return self._get_mutation_prompt(ind_list, history_items, experience)
         elif prompt_type == 'explore':
             return self._get_exploration_prompt(history_items)
+        elif prompt_type == 'empty': # used for initialization
+            return self._get_no_parents_prompt()
         else:
             raise NotImplementedError(f'Unsupported operation type: {prompt_type}')
-
+    
+    def _get_no_parents_prompt(self):
+        return self._compose_prompt(None,None,'empty')
+    
     def _get_crossover_prompt(self, ind_list: List[Item], history_items: List[Item], experience: str) -> str:
         return self._compose_prompt(ind_list, experience, 'crossover')
 
@@ -61,15 +66,23 @@ class Prompt:
         prompt += self._make_history_prompt(worst10, experience=False)
         return prompt
 
-    def _compose_prompt(self, ind_list: List[Item], experience: str, oper_type: str) -> str:
-        parts = [
-            self.info['description'],
-            self._make_requirement_prompt(),
-            self._make_description_prompt(),
-            experience,
-            self._make_history_prompt(ind_list),
-            self._make_instruction_prompt(oper_type)
-        ]
+    def _compose_prompt(self, ind_list: List[Item] = None, experience: str =None, oper_type: str = None) -> str:
+        if ind_list is None:
+            parts = [
+                self.info['description'],
+                self._make_requirement_prompt(),
+                self._make_description_prompt(),
+                self._make_instruction_prompt(oper_type)
+            ]
+        else:
+            parts = [
+                self.info['description'],
+                self._make_requirement_prompt(),
+                self._make_description_prompt(),
+                experience,
+                self._make_history_prompt(ind_list),
+                self._make_instruction_prompt(oper_type)
+            ]
         final_prompt = ''.join(parts)
         #print('prompt example:',final_prompt)
         #assert False
@@ -115,6 +128,8 @@ class Prompt:
         elif oper_type == 'explore':
             return (
                 f"Confidently propose {self.num_offspring } novel and better candidates different from the given ones, leveraging your expertise.\n" + common_tail)
+        elif oper_type =='empty':
+            return (f'Generate {self.num_offspring} good candidates leveraging your experties. \n' + common_tail)
         else:
             raise NotImplementedError(f'Unsupported instruction type: {oper_type}')
 

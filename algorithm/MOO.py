@@ -80,12 +80,33 @@ class MOO:
         module = importlib.import_module(module_path)
         _generate = getattr(module, "generate_initial_population")
         strings = _generate(self.config,self.seed)
+        if len(strings) == 0:
+            print('generate init population return empty list, use llm to generate init pops')
+            return []
         if isinstance(strings[0],str):
             return [self.item_factory.create(i) for i in strings]
         else:
             self.store_history_moles(strings)
             return strings
-
+    def llm_init(self):
+        a = 'start_time,end_time,combination_id\n2023-11-01T00:00:00,2023-11-01T08:00:00,1#&3#\n2023-11-01T08:00:00,2023-11-01T16:56:55.633423,3#\n'
+        generated = [self.item_factory.create(a)]
+        
+        
+        prompt = self.prompt_generator.get_prompt('empty',None,None)
+        log_gap = 10
+        i=0
+        while len(generated) <= self.pop_size:
+            response = self.llm.chat(prompt)
+            new_smiles = extract_smiles_from_string(response)
+            new_smiles = [self.item_factory.create(smile) for smile in new_smiles]
+            generated.extend(new_smiles)
+            i+= 1
+            if i%log_gap==0:
+                print(f'{i} llm calls, init pop size [{len(generated)}/{self.pop_size}]')
+        return generated
+            
+        
     def mutation(self, parent_list):
         prompt = self.prompt_generator.get_prompt('mutation',parent_list,self.history_moles)
         #print('mutation prompt:',prompt)
@@ -110,6 +131,8 @@ class MOO:
         pops = self.store_history_moles(pops)
         return pops
 
+
+    
     def store_history_moles(self,pops):
         unique_pop = []
         for i in pops:
@@ -278,6 +301,8 @@ class MOO:
     
     def run(self):
         store_path = os.path.join(self.save_dir,'mols','_'.join(self.property_list) + '_' + self.config.get('save_suffix') + f'_{self.seed}' +'.pkl')
+        self.prompt_generator = self.prompt_module(self.config)
+        
         if not os.path.exists(os.path.dirname(store_path)):
             os.makedirs(os.path.dirname(store_path), exist_ok=True)
             
@@ -305,11 +330,12 @@ class MOO:
             population,init_pops = self.load_ckpt(store_path)
         else:
             population = self.generate_initial_population(n=self.pop_size)
+            if len(population)==0:
+                population = self.llm_init()
             if population[0].total is None:
                 population = self.evaluate(population) # including removing invalid and repeated candidates
             self.log_results()
             init_pops = copy.deepcopy(population)
-            assert False
         data = {
                 'history':self.history,
                 'init_pops':init_pops,
@@ -321,8 +347,6 @@ class MOO:
             }
         with open(store_path, 'wb') as f:
             pickle.dump(data, f)    
-        
-        self.prompt_generator = self.prompt_module(self.config)
         
         self.num_gen = 0
         

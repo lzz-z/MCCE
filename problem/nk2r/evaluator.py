@@ -4,7 +4,9 @@ import numpy as np
 from scipy.optimize import minimize
 import random
 import time
-from .testapi_far import MultiRemoteAPITester
+from typing import List, Dict, Any
+import json
+from .testapi_far import ABC_API_Client,DEFAULT_TIMEOUT
 AMINO_ACIDS = "ACDEFGHIKLMNPQRSTVWY"
 
 def random_peptide(min_len=5, max_len=40):
@@ -35,6 +37,10 @@ def sanitize_sequence(seq: str) -> str:
 
 
 def generate_initial_population(config, seed=42, init_file="/root/src/MOLLM/problem/nk2r/initial_population.txt"):
+    generated = [random_peptide() for _ in range(5)]
+    return generated
+    
+    
     np.random.seed(seed)
     random.seed(seed)
 
@@ -116,17 +122,18 @@ def check_similarity(candidate_seq: str, min_seq_id: float = 0.3) -> int:
             f.write(candidate_seq + "\n")
 
         # 创建 DB
-        subprocess.run(["mmseqs", "createdb", fasta_file, db], check=True)
+        subprocess.run(["mmseqs", "createdb", fasta_file, db,"-v", "0"], check=True)
 
         # 聚类
         subprocess.run([
             "mmseqs", "cluster", db, clu, tmp,
             "--min-seq-id", str(min_seq_id),
             "-v", "0"
+            
         ], check=True)
 
         # 转换成 TSV
-        subprocess.run(["mmseqs", "createtsv", db, db, clu, tsv_file], check=True)
+        subprocess.run(["mmseqs", "createtsv", db, db, clu, tsv_file,"-v", "0"], check=True)
 
         # 解析 TSV，判断 NKA 和 pep 是否同一 cluster
         with open(tsv_file) as f:
@@ -144,16 +151,32 @@ def cal_iptm(sequence):
     success,iptm = tester.run_full_test(sequence)
     return iptm
 
+def run_peptide_batch(sequences: List[str],
+                      base_url: str = "http://192.168.13.83:8001",
+                      timeout: int = DEFAULT_TIMEOUT,
+                      job_prefix: str = "test") -> Dict[str, Any]:
+    """
+    运行批量预测：输入若干条 peptide 序列，返回 {sequence: result_dict}
+    """
+    client = ABC_API_Client(base_url, timeout)
+    # 调用原有批量预测逻辑
+    result = client.run_batch_predictions(sequences, job_prefix)
+    # 整理成 {sequence: status_data}
+    sequence_results: Dict[str, Any] = {}
+    for idx, seq in enumerate(sequences):
+        job_data = result["results"].get(idx)
+        if job_data:
+            sequence_results[seq] = job_data["status_data"]
+        else:
+            sequence_results[seq] = {"status": "not_submitted"}
+
+    return sequence_results,result
+
 class RewardingSystem:
     def __init__(self, config=None):
         self.config = config
         # 初始化 tester（只初始化一次即可）
-        self.tester = MultiRemoteAPITester(
-            api_host="192.168.8.169",  # 你的API服务器
-            api_port=8000,
-            timeout=30,
-            poll_interval=15
-        )
+        self.tester = ABC_API_Client(base_url="http://192.168.13.83:8001", timeout = DEFAULT_TIMEOUT)
 
     def evaluate(self, items):
         # 先做预处理
@@ -172,7 +195,8 @@ class RewardingSystem:
                 "similarity": simiarity,
                 "pass_mmseqs": pass_mmseqs,
                 "pass_len": pass_len,
-                "iptm": 0.0  # 默认 0，后面更新
+                "iptm_nka": 1.0,  # 默认 0，后面更新
+                "iptm_ours": 0.0
             })
 
         # === 分批并行调用 (4个一组) ===
@@ -185,45 +209,40 @@ class RewardingSystem:
             if not seqs_to_run:
                 continue
 
-            ok, results = self.tester.run_parallel_test(
-                sequences=seqs_to_run,
-                names=None,
-                max_wait_time=1800
-            )
+            sequence_results,result = run_peptide_batch(seqs_to_run)
 
-            # 取出结果
-            if ok:
-                for seq, info in results.items():
-                    iptm = 0.0
-                    try:
-                        iptm = info["status_info"]["result"]["summary_confidences"]["iptm"]
-                    except Exception:
-                        pass
-                    # 找到对应的 peptide 更新 iptm
-                    for p in batch:
-                        if p["peptide"] == seq:
-                            p["iptm"] = iptm
-
-            # 每批之间稍微休眠，避免过载
-            time.sleep(5)
+            
+            for seq in seqs_to_run:
+                root = sequence_results[seq]['output_dir']
+                files = os.listdir(root)
+                target_file = [f for f in files if f.endswith("summary_confidences.json")][0]
+                # A: NK2R, B: Gap  C: NKA  D: ours
+                with open(os.path.join(root,target_file),'r') as f:
+                    content = json.load(f)
+                iptm_nka = content['chain_pair_iptm'][0][2]
+                iptm_ours = content['chain_pair_iptm'][0][3]
+                for p in batch:
+                    if p["peptide"] == seq:
+                        p["iptm_nka"] = iptm_nka
+                        p['iptm_ours'] = iptm_ours
 
         # === 写回 items ===
         for p in peptides:
             results_dict = {
                 'original_results': {
-                    'iptm': p["iptm"],
-                    'similarity': p["similarity"]
+                    'iptm_ours': p["iptm_ours"],
+                    'iptm_nka': p['iptm_nka']
                 },
                 'transformed_results': {
-                    'iptm': 1 - p["iptm"],
-                    'similarity': p["similarity"]
+                    'iptm_ours': 1 - p["iptm_ours"],
+                    'iptm_nka': p['iptm_nka'],
                 },
                 'constraint_results': {
                     'pass_mmseqs': bool(p["pass_mmseqs"]),
                     'similarity_from_biopython': p["similarity"],
-                    'length': len(p["peptide"])
+                    'length': len(p["peptide"]),
                 },
-                'overall_score': p["iptm"] if (p["pass_mmseqs"] and p["pass_len"]) else 0.0
+                'overall_score': p["iptm_ours"] - p['iptm_nka'] if (p["pass_mmseqs"] and p["pass_len"]) else 0.0
             }
             print(f'{p["index"]}th item {p["peptide"]} result:', results_dict)
 

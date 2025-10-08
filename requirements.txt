@@ -1,10 +1,10 @@
 pytdc
 pyyaml
-torch
-numpy 
+numpy==2.2.6
 pandas
-rdkit
-scikit-learn==0.24.2
+scikit-learn==1.2.2
 openai
 pymoo
 pygmo
+requests
+matplotlib

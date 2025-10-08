@@ -1,7 +1,10 @@
 import argparse
 from model.MOLLM import MOLLM  # Ensure that MOLLM class is correctly imported from its respective module
-from rdkit import RDLogger
-RDLogger.DisableLog('rdApp.*')
+try:
+    from rdkit import RDLogger
+    RDLogger.DisableLog('rdApp.*')
+except:
+    print('rdkit not installed, skip setting its warnings')
 import warnings
 warnings.simplefilter("ignore", FutureWarning)
 def main(arg_list=None):

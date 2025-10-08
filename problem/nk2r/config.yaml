@@ -4,8 +4,8 @@ description: "peptide Proposed Target: The Neurokinin-2 Receptor (NK2R, Uniprot 
   Maximize the benefits of activating NK2R.
   Avoid the side effects from activating other receptors, especially NK1R."
 
-save_dir: "/root/src/mollm_results/nk2r"
-save_suffix: "0902"
+save_dir: "/vepfs-mlp2/mlp-public/shikunfeng/Project/mollm_results/nk2r"
+save_suffix: "0930"
 
 resume: False
 early_stopping: False
@@ -20,15 +20,15 @@ model:
   explore_prob: 0. 
 use_au: False  # If True, this will use au model, set to false if you only want to use one LLM
 
-goals: [iptm,similarity]
+goals: [iptm_ours,iptm_nka]
 optimization_direction: [max,min]
-prompt_info_path: /root/src/MOLLM/problem/nk2r/prompt_info.yaml
+prompt_info_path: /vepfs-mlp2/mlp-public/shikunfeng/Project/MOLLM/problem/nk2r/prompt_info.yaml
 ### Important ###
 evalutor_path: problem.nk2r.evaluator
 
 optimization: 
   pop_size: 20
-  eval_budget: 5000
+  eval_budget: 1500
 
 
 

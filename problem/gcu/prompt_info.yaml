@@ -92,6 +92,93 @@ gcu_gemm2: "GCU GEMM v2
   满分是100分
   "
 
+gcu_rmsnorm: "GCU RMSNorm
+  本题希望选手们完成 GCU 上单精度 RMSNorm算子，沿着最后一个维度（即 hidden_dim）进行归一化。详情请参考 torch.nn.RMSNorm 。此题中，将固定如下一项参数，同时也不需要考虑缩放，即gamma=1：
+  eps=1e-6f
+  输入参数：
+  seq_len:	输入 Tensor 的 token 数。
+  dim:	输入 Tensor 的 hidden dim。
+  评分标准与数据规模
+  建立在功能正确的基础上，选手的总分由功能得分和性能得分相加得到。本题共 10 个测试点，每个测试点功能正确将得到 5 分。性能分数将综合所有选手在该测试点的性能得出。数据规模如下：
+  1、保证所有测试点，128 <= dim <= 8192
+  2、保证所有测试点，16 <= seq_len <= 1024
+  满分100分，接口是：#define EPSILON 1e-6f   
+  __attribute__((global, cooperative)) void rmsnorm_kernel(float *inp, float *out, int seq_len, int dim) { 
+  }   
+  void GCU_rmsnorm(float *__restrict dev_input, float *__restrict dev_out, const int seq_len, const int dim) {
+  }
+  "
+gcu_gridsample: 'GCU GridSample
+  本题希望选手们完成 GCU 上单精度 grid_sample算子。详情请参考 torch.nn.functional.grid_sample 。此题中，将固定如下三项参数：
+  mode="nearest"
+  padding_mode="zeros"
+  align_corners=False
+  输入参数：
+  N:	输入 Tensor 的维度。
+  IC:	输入 Tensor 的通道数。
+  IH:	输入 Tensor 的高度。
+  IW:	输入 Tensor 的宽度。
+  OH:	grid_sample后,输出 Tensor 的高度。
+  OW:	grid_sample后,输出 Tensor 的宽度。
+  inp:	输入设备地址，单精度浮点数数组，元素个数为 NxICxIHxIW。
+  grid:	输入设备地址，单精度浮点数数组，元素个数为 NxOHxOWx2。
+  out:	输出设备地址，单精度浮点数数组，元素个数为 NxICxOHxOW。
+  评分标准与数据规模
+  建立在功能正确的基础上，选手的总分由功能得分和性能得分相加得到。本题共 10 个测试点，每个测试点功能正确将得到 5 分。性能分数将综合所有选手在该测试点的性能得出。数据规模如下：
+  1、保证所有测试点,0 < N <= 10
+  2、保证所有测试点,IC == 32
+  3、保证所有测试点,0 < IH <= 64
+  4、保证所有测试点,0 < IW <= 64
+  5、保证所有测试点,0 < OH <= 128
+  6、保证所有测试点,0 < OW <= 128
+  满分100分，接口是：void GCU_GridSample(float *__restrict dev_inp, float *__restrict dev_grid, float *__restrict dev_out, const int n, const int ci, const int hi, const int wi, const int ho, const int wo) {     }
+  '
+gcu_conv2d: "GCU Depthwise Conv2d
+  本题希望选手们完成 GCU 上单精度 Depthwise Conv2d（二维深度卷积）算子，其in_channels==out_channels。详情请参考 torch.nn.Conv2d 。为降低题目的复杂度，此题中将限定如下参数：
+  batch=1，卷积输入 Tensor 的 batch 均为1
+  kernel_size=(3x3)，卷积核大小均为 3x3
+  stride ≤ 3，在两个维度上的步长相同
+  padding ≤ 5，在四个方向上的填充长度相同
+  padding_mode='zeros'，填充值均为0
+  dilation ≤ 4，在两个维度上的空洞扩张相同
+  bias=False，无 bias
+  输入参数：
+  C:	卷积输入 Tensor 的通道数。
+  IH:	卷积输入 Tensor 的高度。
+  IW:	卷积输入 Tensor 的宽度。
+  stride:	卷积的步长。
+  padding:	卷积的填充长度。
+  dilation:	空洞卷积的扩张率。
+  inp:	卷积输入设备地址，单精度浮点数数组，元素个数为 1xCxIHxIW。
+  weight:	卷积核输入设备地址，单精度浮点数数组，元素个数为 Cx1x3x3。
+  out:	卷积结果输出设备地址，单精度浮点数数组，保证元素个数足够存储卷积结果。
+  评分标准与数据规模
+  建立在功能正确的基础上，选手的总分由功能得分和性能得分相加得到。本题共 10 个测试点，每个测试点功能正确将得到 5 分。性能分数将综合所有选手在该测试点的性能得出。数据规模如下：
+  1、保证至少 5 个以上的测试点，C 是 32 的整倍数
+  2、保证所有的测试点，C 不超过 512
+  3、保证所有的测试点，IW 和 IH 不超过 512
+  满分100分，接口是：void GCU_Conv2D(int C, int IH, int IW, int stride, int padding, int dilation, float * __restrict dev_inp, float * __restrict dev_weight, float * __restrict dev_out) {  }
+  "
+
+gcu_mlp: 'GCU MLP
+  在网络性能调优中,对于输出shape比较大的算子可以采用算子融合来节省dma的时间，本题我们实现llm网络中的mlp融合。
+  输入参数：
+  gate_proj_weight:	gate weight设备地址，二维单精度浮点数数组的起始地址，数据按行优先连续存储，数组大小为 hidden_size*intermediate_size*sizeof(float), layout: [hidden_size, intermediate_size]。
+  up_proj_weight:	up weight设备地址，二维单精度浮点数数组的起始地址，数据按行优先连续存储，数组大小为 hidden_size*intermediate_size*sizeof(float)，layout: [hidden_size, intermediate_size]。
+  down_proj_weight:	down weight设备地址，二维单精度浮点数数组的起始地址，数据按行优先连续存储，数组大小为 hidden_size*intermediate_size*sizeof(float), layout: [intermediate_size, hidden_size]。
+  input:	input设备地址，二维单精度浮点数数组的起始地址，数据按行优先连续存储，数组大小为 seq_len*hidden_size*sizeof(float), layout: [seq_len, hidden_size]。
+  output:	output设备地址，二维单精度浮点数数组的起始地址，数据按行优先连续存储，数组大小为 seq_len*hidden_size*sizeof(float), layout: [seq_len, hidden_size]。
+  seq_len:	seq_len。
+  hidden_size:	hidden_size。
+  intermediate_size:	intermediate_size。
+  mlp示例代码
+  gate_proj = torch.einsum("mk, kn -> mn", input, gate_proj_weight) up_proj   = torch.einsum("mk, kn -> mn", input, up_proj_weight) act       = torch.nn.functional.silu(gate_proj) * up_proj down_proj = torch.einsum("mk, kn -> mn", act, down_proj_weight)     
+  评分标准与数据规模
+  建立在功能正确的基础上，选手的总分由功能得分和性能得分相加得到。本题共 10 个测试点，每个测试点功能正确将得到 5 分。性能测试分数将综合所有选手在该测试点的性能得出。数据规模如下：
+  所有的测试点，保证每个输入、输出tensor所占用的字节数小于2GB
+  接口是：void GCU_MLP(float *__restrict gate_proj_weight, float *__restrict up_proj_weight, float *__restrict down_proj_weight, float *__restrict input, float *__restrict output, const int seq_len, const int hidden_size, const int intermediate_size ) { }
+  '
+
 description: "这个题目是要写燧原 GCU(TopsCC)算子, 下面是我给你总结的注意事项：燧原 GCU (TopsCC) 文档帮你总结一下写算子时需要特别注意的地方，以及哪些和 CUDA/NVIDIA 生态里的习惯不同、容易踩坑的点。\n\
   \n\U0001F6A9 和 CUDA 的差异 & 潜在坑点\n1. 内存寻址和访问限制\n\nGCU 2.0 不支持全局寻址\n\n不能直接访问 __shared__\
   \ (L2) 和 __device__ (L3) 内存。\n\n必须通过 DTE (数据搬运引擎) 把数据搬运到 L1 (Private) 才能算。\n\n⚠️\

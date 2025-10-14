@@ -7,6 +7,7 @@ from typing import List, Dict, Optional, Union
 import json
 import random
 import yaml
+from pathlib import Path
 
 
 class Prompt:
@@ -25,6 +26,12 @@ class Prompt:
         self.obj_directions = {obj: config.get('optimization_direction')[i] for i, obj in enumerate(self.properties)}
         self.experience = None
         self.pure_experience = None
+        if self.config.get('model.init_experience'):
+            prompt_info_path = Path(config.get("prompt_info_path"))
+            init_experience_file = prompt_info_path.parent / self.config.get('model.init_experience')
+            with open(init_experience_file, "r") as f:
+                self.experience = self.pure_experience = f.read()
+            
         self.exp_times = 0
         self.experience_prob = config.get('model.experience_prob')
         self.num_offspring = self.config.get('num_offspring',default=2)

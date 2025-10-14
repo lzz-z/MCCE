@@ -106,19 +106,64 @@ def auto_submit(problem_id: int, code: str, wait_interval: int = 10, timeout: in
     return "platform_error", 0, log, new_times
 
 class RewardingSystem:
+    def fix_results(self,item):
+        goal = item.property_list[0]
+        mol = item
+        con = mol.constraints
+
+        # 没有 time_comparison → 0分
+        if not con or "time_comparison" not in con:
+            mol.total = 0.0
+            mol.property[goal] = 100
+            mol.scores = [1.0]
+            return mol
+
+        # 把当前 item 的 time_comparison 转成字典形式方便查找
+        item_times = {}
+        for d in con["time_comparison"]:
+            name = d.get("name")
+            avg_str = d.get("avg")
+            if name and avg_str:
+                avg_us = float(re.findall(r"[\d.]+", avg_str)[0])
+                item_times[name] = avg_us
+
+        # 按 best_times 为主来循环
+        scores = []
+        for name, ref_best in self.best_times.items():
+            if name not in item_times:
+                # 这个 name 测试缺失（例如 MLP7）→ 记 0 分
+                scores.append(0.0)
+                continue
+            
+            avg_us = item_times[name]
+            scores.append(ref_best / avg_us*100)
+        mol.total = sum(scores) / len(scores) 
+        mol.property[goal] = mol.total
+        mol.scores = [1 - mol.total/100]
+        return mol
+
     def __init__(self, config=None):
         self.config = config
         self.goal = self.config.get('goals')[0]
-        if self.goal == 'gcu_var':
+        '''if self.goal == 'gcu_var':
             self.problem_id = 11
         elif self.goal =='gcu_silu':
             self.problem_id = 12
         elif self.goal == 'gcu_gemm2':
-            self.problem_id = 13
+            self.problem_id = 13'''
+        if self.goal == 'gcu_rmsnorm':
+            self.problem_id = 14
+        elif self.goal =='gcu_gridsample':
+            self.problem_id = 15
+        elif self.goal == 'gcu_conv2d':
+            self.problem_id = 16
+        elif self.goal == 'gcu_mlp':
+            self.problem_id = 17
         else:
-            raise NotImplementedError(f'golds should be gcu_var/silu/gemm2, yours is {self.goal}')
+            #raise NotImplementedError(f'golds should be gcu_var/silu/gemm2, yours is {self.goal}')
+            raise NotImplementedError(f'golds should be rmsnorm/gridsample/gcu_conv2d/gcu_mlp, yours is {self.goal}')
         
-    def evaluate(self, items):
+    def evaluate(self, items, mol_buffer):
         invalid_num = 0
         for i,item in enumerate(items):
             code = item.value
@@ -145,6 +190,29 @@ class RewardingSystem:
         log_dict = {}
         log_dict['invalid_num'] = invalid_num
         log_dict['repeated_num'] = 0
+        
+        self.best_times = {}
+        for mol in reversed(items):
+            if mol.constraints['status'] == "success":
+                print(mol.constraints)
+                for d in mol.constraints["time_comparison"]:
+                    name = d["name"]
+                    best_us = float(re.findall(r"[\d.]+", d["best"])[0])
+                    self.best_times[name] = best_us
+                break
+        if len(self.best_times) == 0:
+            for mol, _ in reversed(mol_buffer):
+                if mol.constraints['status'] == "success":
+                    print(mol.constraints)
+                    for d in mol.constraints["time_comparison"]:
+                        name = d["name"]
+                        best_us = float(re.findall(r"[\d.]+", d["best"])[0])
+                        self.best_times[name] = best_us
+                    break
+        for item in items:
+            self.fix_results(item)
+        for item, _ in mol_buffer:
+            self.fix_results(item)
         return items, log_dict
 
 import re
@@ -153,7 +221,7 @@ def generate_initial_population(config, seed=42, n_sample=6):
     random.seed(seed)
 
     goal = config.get('goals')[0]
-    path = Path(f"/root/src/MOLLM/problem/gcu/{goal}_init.txt")
+    path = Path(f"/root/nian/MOLLM/problem/gcu/{goal}_init.txt")
     text = path.read_text(encoding="utf-8")
 
     # 用正则提取 candidate, score, log

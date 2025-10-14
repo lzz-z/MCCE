@@ -125,10 +125,15 @@ class MOO:
         
         return [self.item_factory.create(smile) for smile in new_smiles],prompt,response
 
-    def evaluate(self,pops):
-        pops, log_dict = self.reward_system.evaluate(pops)
+    def evaluate(self,pops_origin):
+        pops = [i for i in pops_origin if i.total is None]
+        already_evaluated = [i for i in pops_origin if i.total is not None]
+        if len(pops) == 0:
+            return pops_origin
+        pops, log_dict = self.reward_system.evaluate(pops,self.mol_buffer)
         self.failed_num += log_dict['invalid_num']
         self.repeat_num += log_dict['repeated_num']
+        pops.extend(already_evaluated)
         pops = self.store_history_moles(pops)
         return pops
 
@@ -257,8 +262,8 @@ class MOO:
             if len(self.history_experience) > 1:
                 results_dict['history_experience'] = [self.history_experience[0], self.history_experience[-1]]
 
-        with open(json_path, 'w') as f:
-            json.dump(results_dict, f, indent=4)
+        with open(json_path, 'w',encoding='utf-8') as f:
+            json.dump(results_dict, f, ensure_ascii=False,indent=4)
         
         print(f'{buffer_type}: {len(self.history_moles)}/{self.budget} generated: {self.generated_num} | '
             f'mol_buffer: {len(mol_buffer)} | '
@@ -333,8 +338,7 @@ class MOO:
             population = self.generate_initial_population(n=self.pop_size)
             if len(population)<self.pop_size:
                 population = self.llm_init(population)
-            if population[0].total is None:
-                population = self.evaluate(population) # including removing invalid and repeated candidates
+            population = self.evaluate(population) # including removing invalid and repeated candidates
             self.log_results()
             init_pops = copy.deepcopy(population)
         data = {
@@ -344,7 +348,8 @@ class MOO:
                 'all_mols':self.mol_buffer,
                 'properties':self.property_list,
                 'evaluation': self.results_dict['results'],
-                'running_time':f'{(time.time()-start_time)/3600:.2f} hours'
+                'running_time':f'{(time.time()-start_time)/3600:.2f} hours',
+                'experience': self.history_experience,
             }
         with open(store_path, 'wb') as f:
             pickle.dump(data, f)    
@@ -370,12 +375,13 @@ class MOO:
             self.num_gen+=1
             data = {
                 'history':self.history,
-                'init_pops':init_pops,
+                'init_pops': [obj[0] for obj in self.mol_buffer[:self.pop_size]], #init_pops,
                 'final_pops':population,
                 'all_mols':self.mol_buffer,
                 'properties':self.property_list,
                 'evaluation': self.results_dict['results'],
-                'running_time':f'{(time.time()-start_time)/3600:.2f} hours'
+                'running_time':f'{(time.time()-start_time)/3600:.2f} hours',
+                'experience': self.history_experience,
             }
             with open(store_path, 'wb') as f:
                 pickle.dump(data, f)
@@ -514,7 +520,7 @@ class MOO:
         - buffer_type (str): Indicates which buffer ('main' or 'au') to update.
         """
         self.time_step += 1
-        mols,_ = self.reward_system.evaluate(mols)
+        mols,_ = self.reward_system.evaluate(mols,self.mol_buffer)
         if buffer_type=='main':
             mol_buffer = self.main_mol_buffer
             self.au_model.train_on_smiles([i.value for i in mols],[i.total for i in mols],loop=4,time_step=self.time_step,mol_buffer=mol_buffer)
@@ -585,7 +591,7 @@ class MOO:
             result_ckpt = json.load(f)
         self.mol_buffer = ckpt['all_mols']
         population = self.select_next_population(self.pop_size) 
-        init_pops = ckpt['init_pops']
+        init_pops = [i[0] for i in self.mol_buffer[:self.pop_size]]#ckpt['init_pops']
         self.history = ckpt['history']
         
         self.history_moles = [i[0].value for i in self.mol_buffer]

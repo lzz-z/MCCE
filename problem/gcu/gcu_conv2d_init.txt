@@ -1,0 +1,120 @@
+<candidate>
+#include <tops/tops_runtime.h>
+
+// ============================================================
+// GCU Depthwise Conv2D (3x3, stride ≤3, dilation ≤4, padding ≤5)
+// ============================================================
+
+__attribute__((global, cooperative))
+void kernel_depthwise_conv2d(float *__restrict inp,
+                             float *__restrict weight,
+                             float *__restrict out,
+                             const int C,
+                             const int IH, const int IW,
+                             const int stride,
+                             const int padding,
+                             const int dilation) {
+    // Thread info
+    int thread_idx = threadIdx.x;
+    int thread_num = blockDim.x;
+
+    // DTE context
+    tops_dte_ctx_t dte_in, dte_w, dte_out;
+    dte_in.init();
+    dte_w.init();
+    dte_out.init();
+
+    // L1 buffer
+    __local__ __valigned__ char l1_buffer[104000];
+    int used = 0;
+    float *win_buf = reinterpret_cast<float *>(l1_buffer + used);
+    used += 9 * sizeof(float);
+    float *w_buf = reinterpret_cast<float *>(l1_buffer + used);
+    used += 9 * sizeof(float);
+    float *out_val = reinterpret_cast<float *>(l1_buffer + used);
+    used += sizeof(float);
+
+    // 输出大小
+    int OH = (IH + 2 * padding - dilation * (3 - 1) - 1) / stride + 1;
+    int OW = (IW + 2 * padding - dilation * (3 - 1) - 1) / stride + 1;
+
+    // 每线程处理若干通道
+    int ch_per_thread = (C + thread_num - 1) / thread_num;
+    int c_start = thread_idx * ch_per_thread;
+    int c_end = (c_start + ch_per_thread < C) ? (c_start + ch_per_thread) : C;
+
+    for (int c = c_start; c < c_end; ++c) {
+        // load weight[c, 0, 3, 3]
+        {
+            int w_idx = c * 9;
+            tops::mdspan g_w(tops::Global, weight + w_idx, 9);
+            tops::mdspan p_w(tops::Private, w_buf, 9);
+            tops::memcpy(dte_w, p_w, g_w);
+        }
+
+        for (int oh = 0; oh < OH; ++oh) {
+            for (int ow = 0; ow < OW; ++ow) {
+                float acc = 0.f;
+
+                int base_h = oh * stride - padding;
+                int base_w = ow * stride - padding;
+
+                // 3x3 kernel
+                for (int kh = 0; kh < 3; ++kh) {
+                    for (int kw = 0; kw < 3; ++kw) {
+                        int ih = base_h + kh * dilation;
+                        int iw = base_w + kw * dilation;
+
+                        float val = 0.f;
+                        if (ih >= 0 && ih < IH && iw >= 0 && iw < IW) {
+                            int inp_idx = (c * IH + ih) * IW + iw;
+                            tops::mdspan g_in(tops::Global, inp + inp_idx, 1);
+                            tops::mdspan p_in(tops::Private, win_buf, 1);
+                            tops::memcpy(dte_in, p_in, g_in);
+                            val = win_buf[0];
+                        }
+                        acc += val * w_buf[kh * 3 + kw];
+                    }
+                }
+
+                // write output
+                out_val[0] = acc;
+                int out_idx = (c * OH + oh) * OW + ow;
+                tops::mdspan g_out(tops::Global, out + out_idx, 1);
+                tops::mdspan p_out(tops::Private, out_val, 1);
+                tops::memcpy(dte_out, g_out, p_out);
+            }
+        }
+    }
+
+    dte_in.destroy();
+    dte_w.destroy();
+    dte_out.destroy();
+}
+
+// ============================================================
+// Host wrapper
+// ============================================================
+void GCU_Conv2D(int C, int IH, int IW,
+                int stride, int padding, int dilation,
+                float *__restrict dev_inp,
+                float *__restrict dev_weight,
+                float *__restrict dev_out) {
+    static const size_t blocks = 1;
+    static const size_t threads = 12; // GCU210 typical
+    kernel_depthwise_conv2d<<<blocks, threads>>>(
+        dev_inp, dev_weight, dev_out,
+        C, IH, IW, stride, padding, dilation);
+}
+</candidate>
+<score>55.75</score>
+<log>testcase0 -> Passed
+testcase1 -> Passed
+testcase2 -> Passed
+testcase3 -> Passed
+testcase4 -> Passed
+testcase5 -> Passed
+testcase6 -> Passed
+testcase7 -> Passed
+testcase8 -> Passed
+testcase9 -> Passed</log>

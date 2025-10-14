@@ -1,11 +1,11 @@
 exper_name: "Kaiwu GCU"
-description: "kaiwu GCU first round, var, silu and gemm"
-save_dir: "/root/src/mollm_results/gcu"
-save_suffix: "0904"
+description: "kaiwu GCU second round"
+save_dir: "/root/nian/mollm_results/gcu"
+save_suffix: "1010"
 resume: True
 
 model:
-  name: zgca,gpt-5 #,gemini-2.5-flash-nothinking     gpt-4-0125-preview  gpt-4o-2024-05-13
+  name: zgca,gemini-2.5-flash-nothinking #,gemini-2.5-flash-nothinking     gpt-4-0125-preview  gpt-4o-2024-05-13
   # name2: zgca,gpt-4o-2024-05-13
   prompt_module: Prompt
   experience_prob: 0.7
@@ -13,16 +13,17 @@ model:
   mutation_prob: 0.2 
   explore_prob: 0. 
   timeout: 900
+  init_experience: init_experience.txt
 use_au: False  # If True, this will use au model, set to false if you only want to use one LLM
 
-goals: [gcu_var]
+goals: [gcu_rmsnorm]
 optimization_direction: [max]
-prompt_info_path: /root/src/MOLLM/problem/gcu/prompt_info.yaml   
+prompt_info_path: /root/nian/MOLLM/problem/gcu/prompt_info.yaml   
 ### Important ###
 evalutor_path: problem.gcu.evaluator
 
 optimization: 
-  pop_size: 8
+  pop_size: 4
   eval_budget: 5000
   num_offspring: 1
 

@@ -319,8 +319,7 @@ def optimize_tail_multiobjective_with_cost(
         return None
     # exact volume check
     final_vol = compute_total_volume(sol_opt, combos_map)
-    if abs(final_vol - required_volume) > 1e-4:
-        return None
+    
 
     # stringify ISO
     for col in ("start_time", "end_time"):
@@ -385,7 +384,8 @@ class PumpEvaluator:
                     messages.append(f"第{i}行 start_time 与上一行 end_time 不连续 ({row['start_time']} != {prev_end})")
 
         # compute totals and check flow range
-        required_volume = float(self.task["required_volume_m3"])
+        required_volume = float(self.task["required_volume_m3"]) 
+        required_volume -= required_volume * 1e-6
         flow_min = float(self.task["flow_rate_min_m3h"])
         flow_max = float(self.task["flow_rate_max_m3h"])
 

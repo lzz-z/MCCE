@@ -1,0 +1,28 @@
+# Write a description for your problem
+description: 'This task is to propose better molecules according to the multiple objectives. the constraints are in the following range:
+   {"constraint_id": "test_001", "molecular_weight": [200, 350], "sa_score": [1, 4], "homo_lumo_gap": [0.25, 0.35], "dipole_moment": [1.0, 3.0]}
+   the unit of humo_lomo_gap is au, the unit of dipole_moment is debye'
+
+# This part is important, you should set your output format here, and probably give an simple example. The <candidate></candidate> is fixed.
+example_output: 'Each output new candidate must start with <candidate> and end with
+  </candidate> in SMILES format. Example one output: <candidate>c1ccccc1</candidate>'
+
+# Optional mutation and crossover instrution, helpful for better operation, you should start with:"Example operations include: "
+mutation_instruction: 'Example operations include:
+  1. Modify functional groups
+  2. Replace atoms or bonds
+  3. Add/remove small substituents
+  4. Ring modifications
+  5. Stereochemistry changes
+  6. Property-specific optimizations
+  '
+crossover_instruction: ''
+
+# Optional, some extra requirements you would like to achieve
+other_requirements: The output molecules should be valid. 
+# The following part are the description of the objectives involved. It is simply consisted of a sentence describe the objective and [optional] normally 
+# what operation could cause a rise or drop. 
+sa_score: sa_score is whether the molecule satisfies the sa score constraint.
+molecular_weight: molecular_weight is whether the molecule satisfies the molecular_weight constraint.
+homo_lumo_gap_au: homo_lumo_gap is whether the molecule satisfies the homo_lumo_gap constraint.
+dipole_moment_debye: dipole_moment is whether the molecule satisfies the dipole_moment constraint.

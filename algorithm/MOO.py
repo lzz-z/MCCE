@@ -362,7 +362,9 @@ class MOO:
                 population.extend(random.sample(database,self.config.get('inject_per_generation')))
             offspring_times = max(min(self.pop_size //self.num_offspring, (self.budget -len(self.mol_buffer)) //self.num_offspring),1)
             offspring = self.generate_offspring(population, offspring_times)
-            population = self.select_next_population(self.pop_size)
+            population = offspring
+            print('Note!!!! no selection here!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+            #population = self.select_next_population(self.pop_size)
             self.log_results()
             if self.config.get('model.experience_prob')>0 and len(self.mol_buffer)>100:
                 self.update_experience()

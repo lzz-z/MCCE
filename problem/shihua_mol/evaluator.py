@@ -82,17 +82,18 @@ constraints = [
 {"constraint_id": "test_004", "molecular_weight": [250, 400], "sa_score": [2.5, 5.5], "homo_lumo_gap": [0.22, 0.32], "dipole_moment": [4.0, 7.0]},
 {"constraint_id": "test_005", "molecular_weight": [280, 320], "sa_score": [2.0, 3.5], "homo_lumo_gap": [0.29, 0.31], "dipole_moment": [1.5, 2.5]}
 ]
-constraint = constraints[0]
+constraint = constraints[4]
 print('constraint:', constraint)
 def generate_initial_population(config, seed=42):
     n_sample = config.get('optimization.pop_size')
-    df = pd.read_csv('/root/nian/MOLLM/problem/shihua_mol/qm9.csv')
-    filtered_df = df[
-        (df["sa_score"].between(*constraint["sa_score"])) &
-        (df["HOMO_LUMO_gap_au"].between(*constraint["homo_lumo_gap"])) &
-        (df["Dipole_debye"].between(*constraint["dipole_moment"]))
-    ]
-    filtered_df = filtered_df.sample(n=n_sample,random_state=seed)
+    df = pd.read_csv('/root/nian/MOLLM/problem/shihua_mol/start_mols.csv')
+    #filtered_df = df[
+    #    (df["sa_score"].between(*constraint["sa_score"])) &
+    #    (df["HOMO_LUMO_gap_au"].between(*constraint["homo_lumo_gap"])) &
+    #    (df["Dipole_debye"].between(*constraint["dipole_moment"]))
+    #]
+    filtered_df = df
+    #filtered_df = filtered_df.sample(n=n_sample,random_state=seed)
     strings = filtered_df.SMILES.values.tolist()
     return strings
 
@@ -102,48 +103,54 @@ import time, os
 
 class RewardingSystem:
     def __init__(self, config):
-        self.df = pd.read_csv('/root/nian/MOLLM/problem/shihua_mol/qm9.csv')
+        self.df = pd.read_csv('/root/nian/MOLLM/problem/shihua_mol/start_mols.csv')
         self.config = config
         self.qm9_smiles = self.df.SMILES.values.tolist()
+        print('qm9_smiles:',len(self.qm9_smiles))
 
     def _evaluate_single(self, smi):
-        try:
-            mol = Chem.MolFromSmiles(smi)
-            if mol is None or not check_validity(smi):
-                return smi, None, "invalid molecule"
-            if smi in self.qm9_smiles:
-                weight = self.df[self.df.SMILES == smi].iloc[0]["molecular_weight"]
-                sa = self.df[self.df.SMILES == smi].iloc[0]["sa_score"]
-                gap = self.df[self.df.SMILES == smi].iloc[0]["HOMO_LUMO_gap_au"]
-                dipole = self.df[self.df.SMILES == smi].iloc[0]["Dipole_debye"]
-            else:
-                weight = Descriptors.MolWt(mol)
-                sa = float(sa_scorer(smi))
-                gap_info = calc_gap_and_dipole_pyscf(smi)
-                gap = gap_info["homo_lumo_gap_au"]
-                dipole = gap_info["dipole_moment_debye"]
+        
+        mol = Chem.MolFromSmiles(smi)
+        if mol is None or not check_validity(smi):
+            return smi, None, "invalid molecule"
+        if smi in self.qm9_smiles:
+            weight = self.df[self.df.SMILES == smi].iloc[0]["molecular_weight"]
+            sa = self.df[self.df.SMILES == smi].iloc[0]["sa_score"]
+            gap = self.df[self.df.SMILES == smi].iloc[0]["homo_lumo_gap_au"]
+            dipole = self.df[self.df.SMILES == smi].iloc[0]["dipole_moment_debye"]
+        else:
+            weight = Descriptors.MolWt(mol)
+            sa = float(sa_scorer(smi))
+            gap_info = calc_gap_and_dipole_pyscf(smi)
+            gap = gap_info["homo_lumo_gap_au"]
+            dipole = gap_info["dipole_moment_debye"]
 
-            result = {
-                "original_results": {
-                    "molecular_weight": weight,
-                    "sa_score": sa,
-                    "homo_lumo_gap_au": gap,
-                    "dipole_moment_debye": dipole,
-                },
-                "transformed_results": {
-                    "molecular_weight": 1 - int(constraint["molecular_weight"][0] <= weight <= constraint["molecular_weight"][1]),
-                    "sa_score": 1 - int(constraint["sa_score"][0] <= sa <= constraint["sa_score"][1]),
-                    "homo_lumo_gap_au": 1 - int(constraint["homo_lumo_gap"][0] <= gap <= constraint["homo_lumo_gap"][1]),
-                    "dipole_moment_debye": 1 - int(constraint["dipole_moment"][0] <= dipole <= constraint["dipole_moment"][1]),
-                },
+        result = {
+            "original_results": {
+                "molecular_weight": weight,
+                "sa_score": sa,
+                "homo_lumo_gap_au": gap,
+                "dipole_moment_debye": dipole,
+            }}
+            #"transformed_results": {
+            #    "molecular_weight": 1 - int(constraint["molecular_weight"][0] <= weight <= constraint["molecular_weight"][1]),
+            #    "sa_score": 1 - int(constraint["sa_score"][0] <= sa <= constraint["sa_score"][1]),
+            #    "homo_lumo_gap_au": 1 - int(constraint["homo_lumo_gap"][0] <= gap <= constraint["homo_lumo_gap"][1]),
+            #    "dipole_moment_debye": 1 - int(constraint["dipole_moment"][0] <= dipole <= constraint["dipole_moment"][1]),
+            #},
+        result["transformed_results"] = result['constraint_results'] ={
+                "molecular_weight": np.abs(weight - (constraint['molecular_weight'][0] + constraint['molecular_weight'][1]) / 2) / 100,
+                "sa_score": np.abs(sa - (constraint['sa_score'][0] + constraint['sa_score'][1]) / 2) / 10,
+                "homo_lumo_gap_au": np.abs(gap - (constraint['homo_lumo_gap'][0] + constraint['homo_lumo_gap'][1]) / 2) ,
+                "dipole_moment_debye": np.abs(dipole - (constraint['dipole_moment'][0] + constraint['dipole_moment'][1]) / 2) / 10,
             }
-            result["overall_score"] = 4 - sum(result["transformed_results"].values())
-            if result["overall_score"] >= 3:
-                print(f"smi: {smi}, result: {result}")
-            return smi, result, None
+        
+        result["overall_score"] = 4 - sum(result["transformed_results"].values())
+        #if result["overall_score"] >= 3.7:
+        print(f"smi: {smi}, result:",result['constraint_results'],result['transformed_results'],result['overall_score'])
+        return smi, result, None
 
-        except Exception as e:
-            return smi, None, str(e)
+   
 
     def evaluate(self, items, mol_buffer, timeout_sec=240):
         invalid_num = 0

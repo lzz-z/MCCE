@@ -33,7 +33,6 @@ class LLM:
         base_url = "http://35.220.164.252:3888/v1/chat/completions"
         api_key = os.getenv("MY_API_KEY") 
         
-        
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}"  

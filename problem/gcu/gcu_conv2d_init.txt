@@ -1,113 +1,259 @@
 <candidate>
 #include <tops/tops_runtime.h>
+#include <tops.h>
+#include <stdint.h>
 
-// ============================================================
-// GCU Depthwise Conv2D (3x3, stride ≤3, dilation ≤4, padding ≤5)
-// ============================================================
+using namespace tops;
 
-__attribute__((global, cooperative))
-void kernel_depthwise_conv2d(float *__restrict inp,
-                             float *__restrict weight,
-                             float *__restrict out,
-                             const int C,
-                             const int IH, const int IW,
-                             const int stride,
-                             const int padding,
-                             const int dilation) {
-    // Thread info
-    int thread_idx = threadIdx.x;
-    int thread_num = blockDim.x;
+static __host__ __forceinline__ int div_up_host(int a, int b) { return (a + b - 1) / b; }
 
-    // DTE context
-    tops_dte_ctx_t dte_in, dte_w, dte_out;
-    dte_in.init();
-    dte_w.init();
-    dte_out.init();
+// 改进点基于 parent#0：
+// - 引入行间双缓冲+预取：对相邻输出行的输入3行集合做滚动复用（仅替换退出的那一行），减少DMA次数。
+// - 对 dilation==1 的常见路径，构建“3行滑窗寄存器缓存”，在水平移动时只搬一组新列（以标量快速路径实现），减少随机访存判断。
+// - 输出行仍整行写回；每线程专注一个通道集合。
+// - 权重向量广播，常量化。
 
-    // L1 buffer
-    __local__ __valigned__ char l1_buffer[104000];
-    int used = 0;
-    float *win_buf = reinterpret_cast<float *>(l1_buffer + used);
-    used += 9 * sizeof(float);
-    float *w_buf = reinterpret_cast<float *>(l1_buffer + used);
-    used += 9 * sizeof(float);
-    float *out_val = reinterpret_cast<float *>(l1_buffer + used);
-    used += sizeof(float);
+__global__ void dwconv3x3_row_rolling_prefetch_kernel(
+    int C, int IH, int IW, int stride, int padding, int dilation,
+    float* __restrict inp_g,
+    float* __restrict weight_g,
+    float* __restrict out_g)
+{
+    const int KH = 3, KW = 3;
+    const int OH = (IH + 2 * padding - dilation * (KH - 1) - 1) / stride + 1;
+    const int OW = (IW + 2 * padding - dilation * (KW - 1) - 1) / stride + 1;
 
-    // 输出大小
-    int OH = (IH + 2 * padding - dilation * (3 - 1) - 1) / stride + 1;
-    int OW = (IW + 2 * padding - dilation * (3 - 1) - 1) / stride + 1;
+    const int tid = threadIdx.x;
+    const int tnum = blockDim.x;
+    const int grid_threads = gridDim.x * tnum;
 
-    // 每线程处理若干通道
-    int ch_per_thread = (C + thread_num - 1) / thread_num;
-    int c_start = thread_idx * ch_per_thread;
-    int c_end = (c_start + ch_per_thread < C) ? (c_start + ch_per_thread) : C;
+    const int V = tops::vlength<vfloat>(); // 32
+    for (int c = blockIdx.x * tnum + tid; c < C; c += grid_threads) {
+        tops_dte_ctx_t dte_w, dte_in, dte_out;
+        dte_w.init(); dte_in.init(); dte_out.init();
 
-    for (int c = c_start; c < c_end; ++c) {
-        // load weight[c, 0, 3, 3]
+        __valigned__ float wbuf[9];
         {
-            int w_idx = c * 9;
-            tops::mdspan g_w(tops::Global, weight + w_idx, 9);
-            tops::mdspan p_w(tops::Private, w_buf, 9);
-            tops::memcpy(dte_w, p_w, g_w);
+            mdspan wG(Global, weight_g + c * 9, 9);
+            mdspan wL(Private, wbuf, 9);
+            tops::memcpy(dte_w, wL, wG);
         }
+
+        vfloat wv0 = vbroadcast<vfloat>(wbuf[0]);
+        vfloat wv1 = vbroadcast<vfloat>(wbuf[1]);
+        vfloat wv2 = vbroadcast<vfloat>(wbuf[2]);
+        vfloat wv3 = vbroadcast<vfloat>(wbuf[3]);
+        vfloat wv4 = vbroadcast<vfloat>(wbuf[4]);
+        vfloat wv5 = vbroadcast<vfloat>(wbuf[5]);
+        vfloat wv6 = vbroadcast<vfloat>(wbuf[6]);
+        vfloat wv7 = vbroadcast<vfloat>(wbuf[7]);
+        vfloat wv8 = vbroadcast<vfloat>(wbuf[8]);
+
+        const int MAXW = 1024;
+        __valigned__ float rowA[MAXW], rowB[MAXW], rowC[MAXW];
+        __valigned__ float out_row[MAXW];
+
+        // 预取第一条输出行需要的3行
+        auto load_row_or_zero = [&](float* dst, int ih) {
+            if (ih >= 0 && ih < IH) {
+                mdspan g(Global, inp_g + (c * IH + ih) * IW, IW);
+                mdspan p(Private, dst, IW);
+                tops::memcpy(dte_in, p, g);
+            } else {
+                for (int i = 0; i < IW; ++i) dst[i] = 0.f;
+            }
+        };
+
+        int prev_in_base = -999999;
+        int prev_ihs[3] = { -999999, -999999, -999999 };
 
         for (int oh = 0; oh < OH; ++oh) {
-            for (int ow = 0; ow < OW; ++ow) {
-                float acc = 0.f;
+            int in_h_base = oh * stride - padding;
+            int ihs_cur[3] = {
+                in_h_base + 0 * dilation,
+                in_h_base + 1 * dilation,
+                in_h_base + 2 * dilation
+            };
 
-                int base_h = oh * stride - padding;
-                int base_w = ow * stride - padding;
-
-                // 3x3 kernel
-                for (int kh = 0; kh < 3; ++kh) {
-                    for (int kw = 0; kw < 3; ++kw) {
-                        int ih = base_h + kh * dilation;
-                        int iw = base_w + kw * dilation;
-
-                        float val = 0.f;
-                        if (ih >= 0 && ih < IH && iw >= 0 && iw < IW) {
-                            int inp_idx = (c * IH + ih) * IW + iw;
-                            tops::mdspan g_in(tops::Global, inp + inp_idx, 1);
-                            tops::mdspan p_in(tops::Private, win_buf, 1);
-                            tops::memcpy(dte_in, p_in, g_in);
-                            val = win_buf[0];
-                        }
-                        acc += val * w_buf[kh * 3 + kw];
-                    }
+            // 滚动复用：如果与前一行共享行则只更新变化的行
+            if (oh == 0) {
+                load_row_or_zero(rowA, ihs_cur[0]);
+                load_row_or_zero(rowB, ihs_cur[1]);
+                load_row_or_zero(rowC, ihs_cur[2]);
+            } else {
+                // 与 prev_ihs 比较，找出需更新的行
+                // 典型stride=1时，oh+1 的 3 行集合 = prev的 {B,C, new}
+                if (ihs_cur[0] != prev_ihs[0] && ihs_cur[0] != prev_ihs[1] && ihs_cur[0] != prev_ihs[2]) {
+                    load_row_or_zero(rowA, ihs_cur[0]);
+                } else {
+                    // 将已有的匹配行拷到rowA
+                    if (ihs_cur[0] == prev_ihs[1]) { for (int i=0;i<IW;++i) rowA[i]=rowB[i]; }
+                    else if (ihs_cur[0] == prev_ihs[2]) { for (int i=0;i<IW;++i) rowA[i]=rowC[i]; }
                 }
 
-                // write output
-                out_val[0] = acc;
-                int out_idx = (c * OH + oh) * OW + ow;
-                tops::mdspan g_out(tops::Global, out + out_idx, 1);
-                tops::mdspan p_out(tops::Private, out_val, 1);
-                tops::memcpy(dte_out, g_out, p_out);
+                if (ihs_cur[1] != prev_ihs[0] && ihs_cur[1] != prev_ihs[1] && ihs_cur[1] != prev_ihs[2]) {
+                    load_row_or_zero(rowB, ihs_cur[1]);
+                } else {
+                    if (ihs_cur[1] == prev_ihs[0]) { for (int i=0;i<IW;++i) rowB[i]=rowA[i]; }
+                    else if (ihs_cur[1] == prev_ihs[2]) { for (int i=0;i<IW;++i) rowB[i]=rowC[i]; }
+                }
+
+                if (ihs_cur[2] != prev_ihs[0] && ihs_cur[2] != prev_ihs[1] && ihs_cur[2] != prev_ihs[2]) {
+                    load_row_or_zero(rowC, ihs_cur[2]);
+                } else {
+                    if (ihs_cur[2] == prev_ihs[0]) { for (int i=0;i<IW;++i) rowC[i]=rowA[i]; }
+                    else if (ihs_cur[2] == prev_ihs[1]) { for (int i=0;i<IW;++i) rowC[i]=rowB[i]; }
+                }
+            }
+            prev_in_base = in_h_base;
+            prev_ihs[0] = ihs_cur[0]; prev_ihs[1] = ihs_cur[1]; prev_ihs[2] = ihs_cur[2];
+
+            // 计算当前输出行
+            if (dilation == 1 && stride == 1) {
+                // 三行滑窗寄存器缓存：以块为单位，vector优先，中间区域无边界分支
+                int ow = 0;
+
+                // 左端标量边界
+                int left_non_vec = min(OW, max(0, padding));
+                for (; ow < left_non_vec; ++ow) {
+                    int base_w = ow - padding;
+                    float acc = 0.f;
+                    for (int kw = 0; kw < 3; ++kw) {
+                        int x = base_w + kw;
+                        float a = (x >= 0 && x < IW) ? rowA[x] : 0.f;
+                        float b = (x >= 0 && x < IW) ? rowB[x] : 0.f;
+                        float cval = (x >= 0 && x < IW) ? rowC[x] : 0.f;
+                        acc += a * wbuf[0 + kw];
+                        acc += b * wbuf[3 + kw];
+                        acc += cval * wbuf[6 + kw];
+                    }
+                    out_row[ow] = acc;
+                }
+
+                // 中间向量段
+                int ow_mid_begin = max(ow, padding);
+                int ow_mid_end = min(OW, IW - 2 + padding);
+                int ow_mid = ow_mid_begin;
+
+                // 主批量：一次处理 V*6 (=192) 的输出，以内循环展开提升ILP
+                const int STEP = V * 6;
+                for (; ow_mid + STEP <= ow_mid_end; ow_mid += STEP) {
+                    #pragma unroll
+                    for (int t = 0; t < 6; ++t) {
+                        int o = ow_mid + t * V;
+                        int x0 = o - padding + 0;
+                        int x1 = o - padding + 1;
+                        int x2 = o - padding + 2;
+
+                        vfloat a0 = vload<vfloat>(rowA + x0);
+                        vfloat a1 = vload<vfloat>(rowA + x1);
+                        vfloat a2 = vload<vfloat>(rowA + x2);
+                        vfloat b0 = vload<vfloat>(rowB + x0);
+                        vfloat b1 = vload<vfloat>(rowB + x1);
+                        vfloat b2 = vload<vfloat>(rowB + x2);
+                        vfloat c0 = vload<vfloat>(rowC + x0);
+                        vfloat c1 = vload<vfloat>(rowC + x1);
+                        vfloat c2 = vload<vfloat>(rowC + x2);
+
+                        vfloat accv = vadd(vmul(a0, wv0), vmul(a1, wv1));
+                        accv = vadd(accv, vmul(a2, wv2));
+                        accv = vadd(accv, vmul(b0, wv3));
+                        accv = vadd(accv, vmul(b1, wv4));
+                        accv = vadd(accv, vmul(b2, wv5));
+                        accv = vadd(accv, vmul(c0, wv6));
+                        accv = vadd(accv, vmul(c1, wv7));
+                        accv = vadd(accv, vmul(c2, wv8));
+
+                        vstore(accv, out_row + o);
+                    }
+                }
+                // 次级批量：V 对齐
+                for (; ow_mid + V <= ow_mid_end; ow_mid += V) {
+                    int o = ow_mid;
+                    int x0 = o - padding + 0;
+                    int x1 = o - padding + 1;
+                    int x2 = o - padding + 2;
+
+                    vfloat a0 = vload<vfloat>(rowA + x0);
+                    vfloat a1 = vload<vfloat>(rowA + x1);
+                    vfloat a2 = vload<vfloat>(rowA + x2);
+                    vfloat b0 = vload<vfloat>(rowB + x0);
+                    vfloat b1 = vload<vfloat>(rowB + x1);
+                    vfloat b2 = vload<vfloat>(rowB + x2);
+                    vfloat c0 = vload<vfloat>(rowC + x0);
+                    vfloat c1 = vload<vfloat>(rowC + x1);
+                    vfloat c2 = vload<vfloat>(rowC + x2);
+
+                    vfloat accv = vadd(vmul(a0, wv0), vmul(a1, wv1));
+                    accv = vadd(accv, vmul(a2, wv2));
+                    accv = vadd(accv, vmul(b0, wv3));
+                    accv = vadd(accv, vmul(b1, wv4));
+                    accv = vadd(accv, vmul(b2, wv5));
+                    accv = vadd(accv, vmul(c0, wv6));
+                    accv = vadd(accv, vmul(c1, wv7));
+                    accv = vadd(accv, vmul(c2, wv8));
+
+                    vstore(accv, out_row + o);
+                }
+
+                // 右端尾部
+                for (int o = ow_mid; o < OW; ++o) {
+                    int base_w = o - padding;
+                    float acc = 0.f;
+                    for (int kw = 0; kw < 3; ++kw) {
+                        int x = base_w + kw;
+                        float a = (x >= 0 && x < IW) ? rowA[x] : 0.f;
+                        float b = (x >= 0 && x < IW) ? rowB[x] : 0.f;
+                        float cv = (x >= 0 && x < IW) ? rowC[x] : 0.f;
+                        acc += a * wbuf[0 + kw];
+                        acc += b * wbuf[3 + kw];
+                        acc += cv * wbuf[6 + kw];
+                    }
+                    out_row[o] = acc;
+                }
+            } else {
+                // 通用路径：标量滑窗
+                for (int ow = 0; ow < OW; ++ow) {
+                    int base_w = ow * stride - padding;
+                    float acc = 0.f;
+                    for (int kw = 0; kw < 3; ++kw) {
+                        int x = base_w + kw * dilation;
+                        float a = (x >= 0 && x < IW) ? rowA[x] : 0.f;
+                        float b = (x >= 0 && x < IW) ? rowB[x] : 0.f;
+                        float cv = (x >= 0 && x < IW) ? rowC[x] : 0.f;
+                        acc += a * wbuf[0 + kw];
+                        acc += b * wbuf[3 + kw];
+                        acc += cv * wbuf[6 + kw];
+                    }
+                    out_row[ow] = acc;
+                }
+            }
+
+            // 写回
+            {
+                mdspan oL(Private, out_row, OW);
+                mdspan oG(Global, out_g + (c * OH + oh) * OW, OW);
+                tops::memcpy(dte_out, oG, oL);
             }
         }
-    }
 
-    dte_in.destroy();
-    dte_w.destroy();
-    dte_out.destroy();
+        dte_w.destroy(); dte_in.destroy(); dte_out.destroy();
+    }
 }
 
-// ============================================================
-// Host wrapper
-// ============================================================
-void GCU_Conv2D(int C, int IH, int IW,
-                int stride, int padding, int dilation,
-                float *__restrict dev_inp,
-                float *__restrict dev_weight,
-                float *__restrict dev_out) {
-    static const size_t blocks = 1;
-    static const size_t threads = 12; // GCU210 typical
-    kernel_depthwise_conv2d<<<blocks, threads>>>(
-        dev_inp, dev_weight, dev_out,
-        C, IH, IW, stride, padding, dilation);
+void GCU_Conv2D(int C, int IH, int IW, int stride, int padding, int dilation,
+                float * __restrict dev_inp,
+                float * __restrict dev_weight,
+                float * __restrict dev_out)
+{
+    int threads = 12;
+    int blocks = div_up_host(C, threads);
+    if (blocks < 1) blocks = 1;
+    dwconv3x3_row_rolling_prefetch_kernel<<<blocks, threads>>>(
+        C, IH, IW, stride, padding, dilation, dev_inp, dev_weight, dev_out);
 }
 </candidate>
-<score>55.75</score>
+<score>60.02</score>
 <log>testcase0 -> Passed
 testcase1 -> Passed
 testcase2 -> Passed
@@ -117,4 +263,272 @@ testcase5 -> Passed
 testcase6 -> Passed
 testcase7 -> Passed
 testcase8 -> Passed
-testcase9 -> Passed</log>
+testcase9 -> Passed
+</log>
+<candidate>
+#include <tops/tops_runtime.h>
+#include <tops.h>
+#include <stdint.h>
+
+using namespace tops;
+
+static __host__ __forceinline__ int div_up_host(int a, int b) { return (a + b - 1) / b; }
+
+// 改进点基于 parent#0：
+// - 引入行间双缓冲+预取：对相邻输出行的输入3行集合做滚动复用（仅替换退出的那一行），减少DMA次数。
+// - 对 dilation==1 的常见路径，构建“3行滑窗寄存器缓存”，在水平移动时只搬一组新列（以标量快速路径实现），减少随机访存判断。
+// - 输出行仍整行写回；每线程专注一个通道集合。
+// - 权重向量广播，常量化。
+
+__global__ void dwconv3x3_row_rolling_prefetch_kernel(
+    int C, int IH, int IW, int stride, int padding, int dilation,
+    float* __restrict inp_g,
+    float* __restrict weight_g,
+    float* __restrict out_g)
+{
+    const int KH = 3, KW = 3;
+    const int OH = (IH + 2 * padding - dilation * (KH - 1) - 1) / stride + 1;
+    const int OW = (IW + 2 * padding - dilation * (KW - 1) - 1) / stride + 1;
+
+    const int tid = threadIdx.x;
+    const int tnum = blockDim.x;
+    const int grid_threads = gridDim.x * tnum;
+
+    const int V = tops::vlength<vfloat>(); // 32
+    for (int c = blockIdx.x * tnum + tid; c < C; c += grid_threads) {
+        tops_dte_ctx_t dte_w, dte_in, dte_out;
+        dte_w.init(); dte_in.init(); dte_out.init();
+
+        __valigned__ float wbuf[9];
+        {
+            mdspan wG(Global, weight_g + c * 9, 9);
+            mdspan wL(Private, wbuf, 9);
+            tops::memcpy(dte_w, wL, wG);
+        }
+
+        vfloat wv0 = vbroadcast<vfloat>(wbuf[0]);
+        vfloat wv1 = vbroadcast<vfloat>(wbuf[1]);
+        vfloat wv2 = vbroadcast<vfloat>(wbuf[2]);
+        vfloat wv3 = vbroadcast<vfloat>(wbuf[3]);
+        vfloat wv4 = vbroadcast<vfloat>(wbuf[4]);
+        vfloat wv5 = vbroadcast<vfloat>(wbuf[5]);
+        vfloat wv6 = vbroadcast<vfloat>(wbuf[6]);
+        vfloat wv7 = vbroadcast<vfloat>(wbuf[7]);
+        vfloat wv8 = vbroadcast<vfloat>(wbuf[8]);
+
+        const int MAXW = 1024;
+        __valigned__ float rowA[MAXW], rowB[MAXW], rowC[MAXW];
+        __valigned__ float out_row[MAXW];
+
+        // 预取第一条输出行需要的3行
+        auto load_row_or_zero = [&](float* dst, int ih) {
+            if (ih >= 0 && ih < IH) {
+                mdspan g(Global, inp_g + (c * IH + ih) * IW, IW);
+                mdspan p(Private, dst, IW);
+                tops::memcpy(dte_in, p, g);
+            } else {
+                for (int i = 0; i < IW; ++i) dst[i] = 0.f;
+            }
+        };
+
+        int prev_in_base = -999999;
+        int prev_ihs[3] = { -999999, -999999, -999999 };
+
+        for (int oh = 0; oh < OH; ++oh) {
+            int in_h_base = oh * stride - padding;
+            int ihs_cur[3] = {
+                in_h_base + 0 * dilation,
+                in_h_base + 1 * dilation,
+                in_h_base + 2 * dilation
+            };
+
+            // 滚动复用：如果与前一行共享行则只更新变化的行
+            if (oh == 0) {
+                load_row_or_zero(rowA, ihs_cur[0]);
+                load_row_or_zero(rowB, ihs_cur[1]);
+                load_row_or_zero(rowC, ihs_cur[2]);
+            } else {
+                // 与 prev_ihs 比较，找出需更新的行
+                // 典型stride=1时，oh+1 的 3 行集合 = prev的 {B,C, new}
+                if (ihs_cur[0] != prev_ihs[0] && ihs_cur[0] != prev_ihs[1] && ihs_cur[0] != prev_ihs[2]) {
+                    load_row_or_zero(rowA, ihs_cur[0]);
+                } else {
+                    // 将已有的匹配行拷到rowA
+                    if (ihs_cur[0] == prev_ihs[1]) { for (int i=0;i<IW;++i) rowA[i]=rowB[i]; }
+                    else if (ihs_cur[0] == prev_ihs[2]) { for (int i=0;i<IW;++i) rowA[i]=rowC[i]; }
+                }
+
+                if (ihs_cur[1] != prev_ihs[0] && ihs_cur[1] != prev_ihs[1] && ihs_cur[1] != prev_ihs[2]) {
+                    load_row_or_zero(rowB, ihs_cur[1]);
+                } else {
+                    if (ihs_cur[1] == prev_ihs[0]) { for (int i=0;i<IW;++i) rowB[i]=rowA[i]; }
+                    else if (ihs_cur[1] == prev_ihs[2]) { for (int i=0;i<IW;++i) rowB[i]=rowC[i]; }
+                }
+
+                if (ihs_cur[2] != prev_ihs[0] && ihs_cur[2] != prev_ihs[1] && ihs_cur[2] != prev_ihs[2]) {
+                    load_row_or_zero(rowC, ihs_cur[2]);
+                } else {
+                    if (ihs_cur[2] == prev_ihs[0]) { for (int i=0;i<IW;++i) rowC[i]=rowA[i]; }
+                    else if (ihs_cur[2] == prev_ihs[1]) { for (int i=0;i<IW;++i) rowC[i]=rowB[i]; }
+                }
+            }
+            prev_in_base = in_h_base;
+            prev_ihs[0] = ihs_cur[0]; prev_ihs[1] = ihs_cur[1]; prev_ihs[2] = ihs_cur[2];
+
+            // 计算当前输出行
+            if (dilation == 1 && stride == 1) {
+                // 三行滑窗寄存器缓存：以块为单位，vector优先，中间区域无边界分支
+                int ow = 0;
+
+                // 左端标量边界
+                int left_non_vec = min(OW, max(0, padding));
+                for (; ow < left_non_vec; ++ow) {
+                    int base_w = ow - padding;
+                    float acc = 0.f;
+                    for (int kw = 0; kw < 3; ++kw) {
+                        int x = base_w + kw;
+                        float a = (x >= 0 && x < IW) ? rowA[x] : 0.f;
+                        float b = (x >= 0 && x < IW) ? rowB[x] : 0.f;
+                        float cval = (x >= 0 && x < IW) ? rowC[x] : 0.f;
+                        acc += a * wbuf[0 + kw];
+                        acc += b * wbuf[3 + kw];
+                        acc += cval * wbuf[6 + kw];
+                    }
+                    out_row[ow] = acc;
+                }
+
+                // 中间向量段
+                int ow_mid_begin = max(ow, padding);
+                int ow_mid_end = min(OW, IW - 2 + padding);
+                int ow_mid = ow_mid_begin;
+
+                // 主批量：一次处理 V*6 (=192) 的输出，以内循环展开提升ILP
+                const int STEP = V * 6;
+                for (; ow_mid + STEP <= ow_mid_end; ow_mid += STEP) {
+                    #pragma unroll
+                    for (int t = 0; t < 6; ++t) {
+                        int o = ow_mid + t * V;
+                        int x0 = o - padding + 0;
+                        int x1 = o - padding + 1;
+                        int x2 = o - padding + 2;
+
+                        vfloat a0 = vload<vfloat>(rowA + x0);
+                        vfloat a1 = vload<vfloat>(rowA + x1);
+                        vfloat a2 = vload<vfloat>(rowA + x2);
+                        vfloat b0 = vload<vfloat>(rowB + x0);
+                        vfloat b1 = vload<vfloat>(rowB + x1);
+                        vfloat b2 = vload<vfloat>(rowB + x2);
+                        vfloat c0 = vload<vfloat>(rowC + x0);
+                        vfloat c1 = vload<vfloat>(rowC + x1);
+                        vfloat c2 = vload<vfloat>(rowC + x2);
+
+                        vfloat accv = vadd(vmul(a0, wv0), vmul(a1, wv1));
+                        accv = vadd(accv, vmul(a2, wv2));
+                        accv = vadd(accv, vmul(b0, wv3));
+                        accv = vadd(accv, vmul(b1, wv4));
+                        accv = vadd(accv, vmul(b2, wv5));
+                        accv = vadd(accv, vmul(c0, wv6));
+                        accv = vadd(accv, vmul(c1, wv7));
+                        accv = vadd(accv, vmul(c2, wv8));
+
+                        vstore(accv, out_row + o);
+                    }
+                }
+                // 次级批量：V 对齐
+                for (; ow_mid + V <= ow_mid_end; ow_mid += V) {
+                    int o = ow_mid;
+                    int x0 = o - padding + 0;
+                    int x1 = o - padding + 1;
+                    int x2 = o - padding + 2;
+
+                    vfloat a0 = vload<vfloat>(rowA + x0);
+                    vfloat a1 = vload<vfloat>(rowA + x1);
+                    vfloat a2 = vload<vfloat>(rowA + x2);
+                    vfloat b0 = vload<vfloat>(rowB + x0);
+                    vfloat b1 = vload<vfloat>(rowB + x1);
+                    vfloat b2 = vload<vfloat>(rowB + x2);
+                    vfloat c0 = vload<vfloat>(rowC + x0);
+                    vfloat c1 = vload<vfloat>(rowC + x1);
+                    vfloat c2 = vload<vfloat>(rowC + x2);
+
+                    vfloat accv = vadd(vmul(a0, wv0), vmul(a1, wv1));
+                    accv = vadd(accv, vmul(a2, wv2));
+                    accv = vadd(accv, vmul(b0, wv3));
+                    accv = vadd(accv, vmul(b1, wv4));
+                    accv = vadd(accv, vmul(b2, wv5));
+                    accv = vadd(accv, vmul(c0, wv6));
+                    accv = vadd(accv, vmul(c1, wv7));
+                    accv = vadd(accv, vmul(c2, wv8));
+
+                    vstore(accv, out_row + o);
+                }
+
+                // 右端尾部
+                for (int o = ow_mid; o < OW; ++o) {
+                    int base_w = o - padding;
+                    float acc = 0.f;
+                    for (int kw = 0; kw < 3; ++kw) {
+                        int x = base_w + kw;
+                        float a = (x >= 0 && x < IW) ? rowA[x] : 0.f;
+                        float b = (x >= 0 && x < IW) ? rowB[x] : 0.f;
+                        float cv = (x >= 0 && x < IW) ? rowC[x] : 0.f;
+                        acc += a * wbuf[0 + kw];
+                        acc += b * wbuf[3 + kw];
+                        acc += cv * wbuf[6 + kw];
+                    }
+                    out_row[o] = acc;
+                }
+            } else {
+                // 通用路径：标量滑窗
+                for (int ow = 0; ow < OW; ++ow) {
+                    int base_w = ow * stride - padding;
+                    float acc = 0.f;
+                    for (int kw = 0; kw < 3; ++kw) {
+                        int x = base_w + kw * dilation;
+                        float a = (x >= 0 && x < IW) ? rowA[x] : 0.f;
+                        float b = (x >= 0 && x < IW) ? rowB[x] : 0.f;
+                        float cv = (x >= 0 && x < IW) ? rowC[x] : 0.f;
+                        acc += a * wbuf[0 + kw];
+                        acc += b * wbuf[3 + kw];
+                        acc += cv * wbuf[6 + kw];
+                    }
+                    out_row[ow] = acc;
+                }
+            }
+
+            // 写回
+            {
+                mdspan oL(Private, out_row, OW);
+                mdspan oG(Global, out_g + (c * OH + oh) * OW, OW);
+                tops::memcpy(dte_out, oG, oL);
+            }
+        }
+
+        dte_w.destroy(); dte_in.destroy(); dte_out.destroy();
+    }
+}
+
+void GCU_Conv2D(int C, int IH, int IW, int stride, int padding, int dilation,
+                float * __restrict dev_inp,
+                float * __restrict dev_weight,
+                float * __restrict dev_out)
+{
+    int threads = 12;
+    int blocks = div_up_host(C, threads);
+    if (blocks < 1) blocks = 1;
+    dwconv3x3_row_rolling_prefetch_kernel<<<blocks, threads>>>(
+        C, IH, IW, stride, padding, dilation, dev_inp, dev_weight, dev_out);
+}
+</candidate>
+<score>60.37</score>
+<log>testcase0 -> Passed
+testcase1 -> Passed
+testcase2 -> Passed
+testcase3 -> Passed
+testcase4 -> Passed
+testcase5 -> Passed
+testcase6 -> Passed
+testcase7 -> Passed
+testcase8 -> Passed
+testcase9 -> Passed
+</log>

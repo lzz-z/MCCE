@@ -1,10 +1,10 @@
 exper_name: "shihua molecule optimization"
 description: "optimize the molecule according to the constraints"
 save_dir: "/root/nian/mollm_results/shihua_mol"
-save_suffix: "1020"
+save_suffix: "new_score_constraint5"
 
 cal_div: True
-resume: True
+resume: False
 early_stopping: False
 model:
   name: zgca,gpt-5-minimal  #  gemini-2.5-flash-nothinking  #,gemini-2.5-flash-nothinking     gpt-4-0125-preview  gpt-4o-2024-05-13
@@ -18,13 +18,13 @@ model:
 use_au: False  # If True, this will use au model, set to false if you only want to use one LLM
 
 goals: [molecular_weight,sa_score,homo_lumo_gap_au,dipole_moment_debye]
-optimization_direction: [max,max,max,max]
+optimization_direction: [min,min,min,min]
 prompt_info_path: /root/nian/MOLLM/problem/shihua_mol/prompt_info.yaml
 ### Important ###
 evalutor_path: problem.shihua_mol.evaluator
 
 optimization: 
-  pop_size: 50
+  pop_size: 2
   eval_budget: 5000
 
 

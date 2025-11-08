@@ -215,9 +215,10 @@ class Prompt:
             )
 
         summary_prompt += (
-            "Keep the summary concise (within 200 words), focusing on actionable insights and avoiding redundancy. "
+            "Keep the summary concise, focusing on actionable insights and avoiding redundancy. "
             "Don't describe the given candidates, directly state the experience."
         )
+        print('summary_prompt not limited in words!!!!!!!!!!!!!!!!!!!!')
 
         self.exp_times += 1
         return summary_prompt, self._make_history_prompt(best10[:5], experience=True), self._make_history_prompt(worst10[:5], experience=True)

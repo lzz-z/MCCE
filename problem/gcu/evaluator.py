@@ -137,7 +137,10 @@ class RewardingSystem:
             
             avg_us = item_times[name]
             scores.append(ref_best / avg_us*100)
-        mol.total = sum(scores) / len(scores) 
+        if len(scores) == 0:
+            mol.total = 0.0
+        else:
+            mol.total = sum(scores) / len(scores) 
         mol.property[goal] = mol.total
         mol.scores = [1 - mol.total/100]
         return mol
@@ -174,7 +177,7 @@ class RewardingSystem:
             results_dict = {
                 'original_results': {
                     self.goal: score
-                },
+                },-
                 'transformed_results': {
                     self.goal: 1-score/100
                 },
@@ -252,7 +255,8 @@ def generate_initial_population(config, seed=42, n_sample=6):
                 },
                 'constraint_results': {
                     'status': status,
-                    'debug_log': log 
+                    'debug_log': log,
+                    'time_comparison': "",
                 },
                 'overall_score': score # only this one cause passing mmseqs is enough
             }

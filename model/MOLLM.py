@@ -61,7 +61,21 @@ class MOLLM:
             module = importlib.import_module(module_path)
             RewardingSystem = getattr(module, "RewardingSystem")
             self.reward_system = RewardingSystem(config=self.config)
-        self.llm = LLM(model = self.config.get('model.name'),config = self.config)
+
+        # ---------------- 主/辅模型协同配置（对齐 MOLLM_1 思路） ----------------
+        # 默认仍然使用单一模型；仅当 config 中显式开启 model_collaboration 时启用协同。
+        self.model_collaboration = self.config.get('model_collaboration', default=False)
+        if self.model_collaboration:
+            # 主模型：沿用原有配置中的 model.name（通常是 API 模型，如 zgca,gpt-4o-2024-05-13）
+            self.llm_main = LLM(model=self.config.get('model.name'), config=self.config)
+            # 辅模型：固定为本地 qwen2.5-7b-instruct，与 MOLLM_1 中 DPO 流程保持一致
+            self.llm_aux = LLM(model='qwen2.5-7b-instruct', config=self.config)
+            self.llm = self.llm_main
+        else:
+            # 兼容原有逻辑：单模型模式
+            self.llm_main = LLM(model=self.config.get('model.name'), config=self.config)
+            self.llm_aux = None
+            self.llm = self.llm_main
         self.seed = seed
         self.history = []
         self.init_pops = []
@@ -85,7 +99,11 @@ class MOLLM:
         if self.resume:
             self.load_from_pkl(self.save_path)
 
-        moo = MOO(self.reward_system, self.llm,self.property_list,self.config,self.seed)
+        # 根据是否开启协同，决定是否传入第二个 LLM
+        if getattr(self, "model_collaboration", False):
+            moo = MOO(self.reward_system, self.llm_main, self.property_list, self.config, self.seed, llm2=self.llm_aux)
+        else:
+            moo = MOO(self.reward_system, self.llm_main, self.property_list, self.config, self.seed)
         init_pops,final_pops = moo.run()
         self.history.append(moo.history)
         self.final_pops.append(final_pops)

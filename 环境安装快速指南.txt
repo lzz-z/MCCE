@@ -1,0 +1,58 @@
+MCCE 环境安装快速指南
+=====================
+
+MCCE需要两个conda环境：moorl（主优化）+ verl（DPO训练）
+
+快速安装：
+=========
+
+1. 创建moorl环境（主环境）
+-----------------------
+conda create -n moorl python=3.10
+conda activate moorl
+pip install -r requirements_moorl.txt
+
+# 如需分子优化，额外安装：
+conda install -c conda-forge rdkit
+
+2. 创建verl环境（训练环境）
+-----------------------
+conda create -n verl python=3.10
+conda activate verl
+pip install -r requirements_verl.txt
+
+# 安装PyTorch (CUDA 12.1)
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+验证安装：
+=========
+
+# 测试moorl环境
+conda activate moorl
+python -c "from algorithm.MOO import MOO; print('✓ moorl环境OK')"
+
+# 测试verl环境
+conda activate verl
+python -c "import trl; import swanlab; print('✓ verl环境OK')"
+
+快速开始：
+=========
+
+# 运行优化（moorl环境）
+conda activate moorl
+python main.py problem/molecules/config.yaml
+
+# DPO训练会自动在verl环境中执行，无需手动切换
+
+详细说明：
+=========
+- 完整文档：环境配置说明.md
+- moorl依赖：requirements_moorl.txt
+- verl依赖：requirements_verl.txt
+
+环境大小：
+=========
+- moorl: ~5-8 GB
+- verl: ~8-12 GB
+- 总计: ~15-20 GB
+

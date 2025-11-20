@@ -1,0 +1,35 @@
+exper_name: "MOTSP"
+description: "Multi-Objective Traveling Salesman Problem with 100 cities"
+save_dir: "/home/lzz/motsp_Results"
+save_suffix: "motsp"
+initial_pop: "random1" # best100, worst100, random1 ~ 5
+resume: False
+
+model:
+  name: zgca,gemini-2.5-flash-nothinking 
+  # name2: zgca,gpt-4o-2024-05-13
+  prompt_module: Prompt
+  experience_prob: 0.0
+  crossover_prob: 0.8
+  mutation_prob: 0.2 
+  explore_prob: 0. 
+  max_new_tokens: 1024  # MOTSP 需要完整 tour，放宽回复长度
+
+# 本地模型推理次数已恢复正常，与API模型统一
+model_collaboration: True  # 启用主/辅模型协同（主：API，大：本地 Qwen-7B）
+
+goals: [distance_obj1, distance_obj2]
+optimization_direction: [min, min]
+prompt_info_path: problem/motsp/prompt_info.yaml
+### Important ###
+evalutor_path: problem.motsp.evaluator
+
+# MOTSP 使用 embedding-based 相似度构造 DPO 数据
+dpo_script_path: /home/lzz/MCCE/tools/makerldata_motsp_embed.py
+
+optimization: 
+  pop_size: 50
+  eval_budget: 8000
+
+
+

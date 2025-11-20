@@ -1,0 +1,31 @@
+# Write a description for your problem
+description: This task is to propose better solutions for the Multi-Objective Traveling Salesman Problem (MOTSP) with 100 cities. Each city has four coordinates (x1, y1, x2, y2) representing two different objectives. The goal is to find tours that minimize both total distances simultaneously.
+
+# This part is important, you should set your output format here, and probably give an simple example. The <candidate></candidate> is fixed.
+example_output: 'Each output new candidate must start with <candidate> and end with
+  </candidate>. The tour must be a complete permutation of all city indices (0 to n-1).
+
+  Example for small problems (adapt n for your specific problem size):
+  <candidate>tour = np.array([0, 3, 1, 4, 2])</candidate> (for 5 cities)
+
+  For larger problems, create a complete permutation of all cities from 0 to n-1.'
+  
+# Optional mutation and crossover instrution, helpful for better operation, you should start with:"Example operations include: "
+mutation_instruction: 'Example operations include:
+  swap cities or reverse segments in the tour
+  '
+crossover_instruction: 'Example operations include:
+  combine segments from parent tours'
+
+# Optional, some extra requirements you would like to achieve
+other_requirements: 'The tour must be a valid permutation of all 100 cities (0-99). 
+  Each city must appear exactly once in the tour. 
+  The tour should start and end at the same city (closed tour).
+  Try to find tours that balance both objectives (distance_obj1 and distance_obj2).
+  Consider using TSP heuristics like nearest neighbor, 2-opt, or 3-opt improvements.
+  Significant changes from the original tour are encouraged to explore the solution space.'
+
+# The following part are the description of the objectives involved. It is simply consisted of a sentence describe the objective and [optional] normally 
+# what operation could cause a rise or drop. 
+distance_obj1: this objective is the total Euclidean distance of the tour using the first set of coordinates (x1, y1) for each city. Lower values are better. Operations that reduce distances between consecutive cities in the tour will improve this objective.
+distance_obj2: this objective is the total Euclidean distance of the tour using the second set of coordinates (x2, y2) for each city. Lower values are better. Operations that reduce distances between consecutive cities in the tour will improve this objective. 

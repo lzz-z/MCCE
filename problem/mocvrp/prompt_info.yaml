@@ -1,0 +1,30 @@
+# Write a description for your problem
+description: This task is to propose better solutions for the Multi-Objective Capacitated Vehicle Routing Problem (MOCVRP). There are {num_vehicles} vehicles with capacity 1.0, one depot, and {num_customers} customers. Each customer has coordinates (x, y) and a demand. The goal is to assign customers to vehicles such that each vehicle's capacity is not exceeded, while minimizing both the total distance traveled by all vehicles and the makespan (maximum route distance among all vehicles).
+
+# This part is important, you should set your output format here, and probably give an simple example. The <candidate></candidate> is fixed.
+example_output: 'Each output new candidate must start with <candidate> and end with
+  </candidate>. The solution must be a list of {num_vehicles} routes, where each route is a list of customer indices assigned to that vehicle.
+
+  Example for this problem: <candidate>solution = [[5, 12, 23, 34, 41], [2, 8, 15, 27, 38], [1, 9, 16, 28, 39], [3, 10, 17, 29, 40], [4, 11, 18, 30, 42], [6, 13, 19, 31, 43], [7, 14, 20, 32, 44], [0, 21, 24, 33, 45], [22, 25, 35, 46], [26, 36, 47], [37, 48], [49], [], [], [], [], [], [], [], []]</candidate>
+
+  The solution should be a list of {num_vehicles} lists, where each inner list contains the customer indices assigned to that vehicle. Empty lists are allowed if some vehicles are not needed.'
+
+# Optional mutation and crossover instruction, helpful for better operation, you should start with:"Example operations include: "
+mutation_instruction: 'Example operations include: moving or swapping customers between routes, rearranging customers within a route, or splitting/merging routes.'
+crossover_instruction: 'Example operations include: exchanging routes or parts of routes between solutions, or combining elements from both parents.'
+
+# Optional, some extra requirements you would like to achieve
+other_requirements: 'The solution must be a list of {num_vehicles} lists.
+  Each inner list contains customer indices (integers from 0 to {num_customers-1}).
+  All {num_customers} customers must be assigned exactly once across all routes.
+  The total demand of customers in each route must not exceed vehicle capacity (1.0).
+  Routes can be empty lists if not all vehicles are needed.
+  Try to balance the two objectives (total distance and makespan).
+  Consider spatial clustering when assigning customers to vehicles.
+  Significant changes from the original solution are encouraged to explore the solution space.
+  Invalid solutions (unassigned customers, capacity violations, or invalid indices) will be rejected.'
+
+# The following part are the description of the objectives involved. It is simply consisted of a sentence describe the objective and [optional] normally
+# what operation could cause a rise or drop.
+total_distance: this objective is the sum of distances traveled by all vehicles (including return trips to depot). Lower values are better. Shorter routes and fewer vehicles used will improve this objective.
+makespan: this objective is the maximum distance traveled by any single vehicle. Lower values are better. Balancing the workload among vehicles will improve this objective.

@@ -1,5 +1,85 @@
-genetic_gfn/multi_objective/genetic_gfn/results/
+# Python
 __pycache__/
-.ipynb_checkpoints/
-genetic_gfn/multi_objective/data/docked_mols.h5 
-genetic_gfn/multi_objective/oracle/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# Environment
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 数据和模型输出
+data/dpo_training/*.json
+data/dpo_training/fulldata/
+data/dpo_models/
+results/
+*.pkl
+*.pth
+*.bin
+*.safetensors
+
+# 日志
+swanlog/
+*.log
+wandb/
+
+# 临时文件
+*.tmp
+*.bak
+submission.csv
+submit.csv
+
+# 测试文件
+test.py
+test_*.py
+
+# Jupyter notebook outputs
+*.ipynb
+
+# Mac OS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini

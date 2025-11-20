@@ -1,25 +1,31 @@
 exper_name: "circle_packing"
 description: "n = 26 in unit square"
-save_dir: "/home/hp/src/mollm_results/"
+save_dir: "/home/lzz/mollm_results/"
 save_suffix: "circle_packing"
 initial_pop: "random1" # best100, worst100, random1 ~ 5
-resume: True
+resume: False
 
 model:
   name: zgca,gemini-2.5-flash-nothinking  #,gemini-2.5-flash-nothinking     gpt-4-0125-preview  gpt-4o-2024-05-13
   # name2: zgca,gpt-4o-2024-05-13
   prompt_module: Prompt
-  experience_prob: 0.5
+  experience_prob: 0.0
   crossover_prob: 0.8
   mutation_prob: 0.2 
   explore_prob: 0. 
-use_au: False  # If True, this will use au model, set to false if you only want to use one LLM
+  # 对 circle_packing 这类代码型任务，回复需要包含完整的 centers/radii 数组，
+  # 因此单独放宽本地 Qwen 模型的最大回复长度
+  max_new_tokens: 1024
+model_collaboration: True   # 启用主/辅模型协同与 DPO 流程
 
 goals: [radii]
 optimization_direction: [max]
-prompt_info_path: /home/hp/src/MOLLM/problem/circle_packing/prompt_info.yaml
+prompt_info_path: /home/lzz/MCCE/problem/circle_packing/prompt_info.yaml
 ### Important ###
 evalutor_path: problem.circle_packing.evaluator
+
+# 为 circle_packing 指定基于 embedding 相似度的 DPO 数据构建脚本
+dpo_script_path: /home/lzz/MCCE/tools/makerldata_circle_embed.py
 
 optimization: 
   pop_size: 50

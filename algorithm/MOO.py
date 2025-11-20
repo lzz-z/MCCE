@@ -19,6 +19,7 @@ from model.util import *
 from algorithm import PromptTemplate
 import importlib
 import pickle
+import shutil
 from model.LLM import LLM
 
 
@@ -35,27 +36,30 @@ def set_seed(seed):
     torch.backends.cudnn.benchmark = False
 
 class MOO:
-    def __init__(self, reward_system, llm,property_list,config,seed):
+    def __init__(self, reward_system, llm, property_list, config, seed, llm2=None):
         self.reward_system = reward_system
         self.config = config
         self.seed = seed
+        # 主模型与辅模型（保持与 MOLLM_1 协同接口一致）
         self.llm = llm
-        #self.au_llm = LLM(model = self.config.get('model.name2'))
+        self.llm1 = llm
+        self.llm2 = llm2
+        self.current_llm_flag = 0  # 0: 主模型, 1: 辅模型
         self.history = HistoryBuffer()
         self.item_factory = ItemFactory(property_list)
         self.property_list = property_list
         self.pop_size = self.config.get('optimization.pop_size')
         self.budget = self.config.get('optimization.eval_budget')
-        self.use_au = self.config.get('use_au')
+        # genetic_gfn (au) 已移除，保留 model_collaboration（MCCE Qwen协同）
+        # self.use_au = self.config.get('use_au')
         self.save_dir = os.path.join(self.config.get('save_dir'),self.config.get('model.name'))
         self.prompt_module = getattr(PromptTemplate ,self.config.get('model.prompt_module',default='Prompt'))
         self.history_moles = []
-        self.mol_buffer = [] # same as all_mols but with orders for computing auc
-        self.main_mol_buffer = []
-        self.au_mol_buffer = []
-        self.results_dict = {'results':[]}
-        self.main_results_dict = {'results':[]}
-        self.au_results_dict = {'results':[]}
+        self.mol_buffer = []  # same as all_mols but with orders for computing auc
+        # genetic_gfn buffers 已移除
+        # self.main_mol_buffer = []
+        # self.au_mol_buffer = []
+        self.results_dict = {'results': []}
         self.history_experience = []
         self.repeat_num = 0
         self.failed_num = 0
@@ -65,15 +69,39 @@ class MOO:
         self.patience = 0
         self.old_score = 0
         self.early_stopping = False
-        self.record_dict = {}
-        for i in ['main','au']:
-            for j in ['all_num','failed_num','repeat_num']:
-                self.record_dict[i+'_'+j] = 0
-        self.record_dict['main_history_smiles'] = []
-        self.record_dict['au_history_smiles'] = []
         self.time_step = 0
         self.start_time = time.time()
-        self.num_offspring = self.config.get('num_offspring',default=2)
+        self.num_offspring = self.config.get('num_offspring', default=2)
+
+        # 记录统计信息
+        self.record_dict = {}
+        # genetic_gfn 'au' 统计已移除，仅保留主模型统计
+        for j in ['all_num', 'failed_num', 'repeat_num']:
+            self.record_dict['main_' + j] = 0
+        self.record_dict['main_history_smiles'] = []
+
+        # ---------------- DPO / 日志 相关：对齐 MOLLM_1/algorithm/MOO.py ----------------
+        # 只在需要协同 / DPO 时使用，不会影响原有单模型流程
+        self._now_str = time.strftime('%m%d%H%M')
+        # 统一实验标识：用于 results / prompt 等日志文件名
+        self.experiment_tag = (
+            f"{'_'.join(self.property_list)}_"
+            f"{self.config.get('save_suffix')}_"
+            f"{self.seed}_{self._now_str}"
+        )
+        self.prompt_records = {
+            "queries": [],
+            "init_pops": [],
+            "final_pops": []
+        }
+        # DPO 训练状态
+        self.previous_dpo_exp_name = None
+        self.current_dpo_model_path = None
+        self.original_ref_model_path = "/home/lzz/models/Qwen/Qwen2.5-7B-Instruct"
+        # 模型轮次计数（与 MOLLM_1 一致）
+        self.model_round_counter = 0
+        self.llm1_rounds = 0
+        self.llm2_rounds = 0
 
     def generate_initial_population(self, n):
         module_path = self.config.get('evalutor_path')  # e.g., "molecules"
@@ -211,7 +239,7 @@ class MOO:
             new_score = avg_top100
             if new_score - self.old_score < 1e-4 and self.old_score>0.05:
                 self.patience += 1
-                if self.config.get('early_stopping',default=True) and self.patience >= 6:
+                if self.config.get('early_stopping',default=True) and self.patience >= 6000:
                     print('convergence criteria met, abort ...... ')
                     self.early_stopping = True
             else:
@@ -231,8 +259,8 @@ class MOO:
         else:
             raise ValueError(f"Unknown buffer_type: {buffer_type}")
 
-        json_path = os.path.join(save_dir, '_'.join(self.property_list) + '_' +
-                                self.config.get('save_suffix') + f'_{self.seed}.json')
+        # 日志文件统一带时间戳，便于区分多次运行的结果
+        json_path = os.path.join(save_dir, f"{self.experiment_tag}.json")
         os.makedirs(os.path.dirname(json_path), exist_ok=True)
 
         results_dict['results'].append({
@@ -264,6 +292,10 @@ class MOO:
 
         with open(json_path, 'w',encoding='utf-8') as f:
             json.dump(results_dict, f, ensure_ascii=False,indent=4)
+        
+        # 在协同模式下，每次 log_results 都保存 prompt.json（像 motsp 一样），确保中断后也能保留记录
+        if buffer_type == "default" and getattr(self.config, "get", None) and self.config.get('model_collaboration', default=False):
+            self._save_prompt_records_json()
         
         print(f'{buffer_type}: {len(self.history_moles)}/{self.budget} generated: {self.generated_num} | '
             f'mol_buffer: {len(mol_buffer)} | '
@@ -312,14 +344,7 @@ class MOO:
         if not os.path.exists(os.path.dirname(store_path)):
             os.makedirs(os.path.dirname(store_path), exist_ok=True)
             
-        ''' initialize genetic gfn model'''
-        
-        if self.use_au:
-            from genetic_gfn.multi_objective.genetic_gfn.run import Genetic_GFN_Optimizer
-            from genetic_gfn.multi_objective.run import prepare_optimization_inputs
-            args, config_default, oracle = prepare_optimization_inputs()
-            self.au_model = Genetic_GFN_Optimizer(args=args)
-            self.au_model.setup_model(oracle, config_default)
+        # genetic_gfn (au_model) 初始化已移除
 
         """High level logic"""
         print('exper_name',self.config.get('exper_name'))
@@ -331,67 +356,225 @@ class MOO:
             module_path = self.config.get('evalutor_path')  # e.g., "molecules"
             module = importlib.import_module(module_path)
             _get = getattr(module, "get_database")
-            database = _get(self.config,n_sample=200)
+            database = _get(self.config, n_sample=200)
+
         if self.config.get('resume'):
-            population,init_pops = self.load_ckpt(store_path)
+            population, init_pops = self.load_ckpt(store_path)
         else:
             population = self.generate_initial_population(n=self.pop_size)
-            if len(population)<self.pop_size:
+            if len(population) < self.pop_size:
                 population = self.llm_init(population)
-            population = self.evaluate(population) # including removing invalid and repeated candidates
+            population = self.evaluate(population)  # including removing invalid and repeated candidates
             self.log_results()
             init_pops = copy.deepcopy(population)
-        data = {
-                'history':self.history,
-                'init_pops':init_pops,
-                'final_pops':population,
-                'all_mols':self.mol_buffer,
-                'properties':self.property_list,
-                'evaluation': self.results_dict['results'],
-                'running_time':f'{(time.time()-start_time)/3600:.2f} hours',
-                'experience': self.history_experience,
+
+        # 初始化 init_pops 到 prompt_records（与 MOLLM_1 一致）
+        self.prompt_records["init_pops"] = [
+            {
+                "value": item.value,
+                "property": getattr(item, "property", None),
+                "total": float(getattr(item, "total", 0.0))
             }
+            for item in init_pops
+        ]
+
+        data = {
+            'history': self.history,
+            'init_pops': init_pops,
+            'final_pops': population,
+            'all_mols': self.mol_buffer,
+            'properties': self.property_list,
+            'evaluation': self.results_dict['results'],
+            'running_time': f'{(time.time() - start_time) / 3600:.2f} hours',
+            'experience': self.history_experience,
+        }
         with open(store_path, 'wb') as f:
-            pickle.dump(data, f)    
-        
+            pickle.dump(data, f)
+
         self.num_gen = 0
-        
+
+        # DPO 触发辅助变量
+        last_triggered_multiple = 0
+
         while True:
             if self.config.get('inject_per_generation'):
                 print('inject!')
-                population.extend(random.sample(database,self.config.get('inject_per_generation')))
-            offspring_times = max(min(self.pop_size //self.num_offspring, (self.budget -len(self.mol_buffer)) //self.num_offspring),1)
+                population.extend(random.sample(database, self.config.get('inject_per_generation')))
+
+            # 协同模式下，每一代先切换当前 LLM，与 MOLLM_1 对齐
+            if getattr(self.config, "get", None) and self.config.get('model_collaboration', default=False):
+                self.switch_llm()
+
+            offspring_times = max(
+                min(self.pop_size // self.num_offspring,
+                    (self.budget - len(self.mol_buffer)) // self.num_offspring),
+                1
+            )
             offspring = self.generate_offspring(population, offspring_times)
-            population = offspring
-            print('Note!!!! no selection here!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-            #population = self.select_next_population(self.pop_size)
+
+            # 若存在新个体，基于历史缓冲与前代个体进行 Pareto 选择
+            if offspring:
+                if len(self.mol_buffer) >= self.pop_size:
+                    population = self.select_next_population(self.pop_size)
+                else:
+                    population = offspring
+            else:
+                # 若本轮未能生成有效个体，回退到历史最优种群，确保后续 LLM 仍有父代
+                selected = self.select_next_population(self.pop_size)
+                population = selected if selected else population
             self.log_results()
-            if self.config.get('model.experience_prob')>0 and len(self.mol_buffer)>100:
+
+            # 与 MOLLM_1 一致：按 experience_prob 更新经验
+            if self.config.get('model.experience_prob') > 0 and len(self.mol_buffer) > 100:
                 self.update_experience()
+
+            # ---------------- DPO 触发逻辑：大小模型交替一次就触发 ----------------
+            if getattr(self.config, "get", None) and self.config.get('model_collaboration', default=False) and self.llm2 is not None:
+                min_rounds = min(self.llm1_rounds, self.llm2_rounds)
+                # 修改为：每次大小模型都至少执行1轮后就触发DPO训练
+                should_trigger_dpo = (
+                    self.llm1_rounds >= 1 and
+                    self.llm2_rounds >= 1 and
+                    min_rounds - last_triggered_multiple >= 1
+                )
+
+                if should_trigger_dpo and len(self.mol_buffer) < self.budget:
+                    last_triggered_multiple = min_rounds
+                    print(
+                        f"Triggering DPO training: LLM1 rounds={self.llm1_rounds}, "
+                        f"LLM2 rounds={self.llm2_rounds}, total molecules={len(self.mol_buffer)}"
+                    )
+
+                    # 保存最新数据，以供 DPO 数据脚本构造训练数据
+                    data = {
+                        'history': self.history,
+                        'init_pops': init_pops,
+                        'final_pops': population,
+                        'all_mols': self.mol_buffer,
+                        'properties': self.property_list,
+                        'evaluation': self.results_dict['results'],
+                        'running_time': f'{(time.time() - start_time) / 3600:.2f} hours'
+                    }
+                    with open(store_path, 'wb') as f:
+                        pickle.dump(data, f)
+                    print(f"Data saved to {store_path} before calling DPO training script.")
+
+                    # 同步将 prompt_records 写入 JSON，供 makerldata_* 读取（统一记录格式）
+                    self._save_prompt_records_json()
+
+                    # 1) 先卸载本地模型，释放显存（与 MOLLM_1 一致）
+                    if hasattr(self.llm2, 'reset_model'):
+                        self.llm2.reset_model()
+
+                    # 2) 调用 DPO 数据&训练脚本（支持通过配置覆盖路径，默认使用分子任务脚本）
+                    train_exp_name = (
+                        f"{'_'.join(self.property_list)}_{self.config.get('save_suffix')}_"
+                        f"{self.seed}_{self._now_str}_round{min(self.llm1_rounds, self.llm2_rounds)}"
+                    )
+                    # 使用项目内的相对路径
+                    MCCE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                    dpo_data_dir = os.path.join(MCCE_ROOT, "data", "dpo_training")
+                    dpo_model_dir = os.path.join(MCCE_ROOT, "data", "dpo_models")
+
+                    import subprocess
+                    # 使用绝对路径调用 MCCE 下的 DPO 数据&训练脚本，避免找不到文件；
+                    # 若配置中提供 dpo_script_path，则优先使用（方便为不同任务定制，如 circle_packing 使用 embedding 相似度脚本）
+                    dpo_script_path = self.config.get(
+                        'dpo_script_path',
+                        default="/home/lzz/MCCE/tools/makerldata_dpov3.py"
+                    )
+                    dpo_command = [
+                        "python", dpo_script_path,
+                        "--exp", train_exp_name,
+                        "--pkl_path", store_path,
+                        "--data_dir", dpo_data_dir,
+                        "--model_dir", dpo_model_dir,
+                        "--ref_model_path", self.original_ref_model_path
+                    ]
+                    if self.previous_dpo_exp_name:
+                        dpo_command.extend(["--prev_exp", self.previous_dpo_exp_name])
+
+                    print(f"Starting DPO training with command: {' '.join(dpo_command)}")
+                    subprocess.run(dpo_command)
+
+                    # 更新上一次实验名称
+                    self.previous_dpo_exp_name = train_exp_name
+
+                    # 3) 训练完成后加载新模型，并删除旧的 DPO 模型目录（与 MOLLM_1 保持一致）
+                    new_model_path = os.path.join(dpo_model_dir, train_exp_name)
+                    if os.path.exists(new_model_path) and hasattr(self.llm2, 'load_model_from_path'):
+                        previous_model_path = self.current_dpo_model_path
+
+                        print(f"Loading new DPO model from: {new_model_path}")
+                        self.llm2.load_model_from_path(new_model_path)
+                        self.current_dpo_model_path = new_model_path
+
+                        if previous_model_path and os.path.isdir(previous_model_path) and previous_model_path != new_model_path:
+                            print(f"New DPO model loaded. Deleting old model directory: {previous_model_path}")
+                            try:
+                                shutil.rmtree(previous_model_path)
+                                print("Successfully deleted old DPO model directory.")
+                            except OSError as e:
+                                print(f"Error deleting old DPO model directory {previous_model_path}: {e}")
+                    else:
+                        print(f"Warning: Trained model path {new_model_path} does not exist. Continuing with current model.")
+
+            # ---------------- 终止条件与常规保存 ----------------
             if len(self.mol_buffer) >= self.budget or self.early_stopping:
+                # 结束前记录 final_pops
+                self.prompt_records["final_pops"] = [
+                    {
+                        "value": item.value,
+                        "property": getattr(item, "property", None),
+                        "total": float(getattr(item, "total", 0.0))
+                    }
+                    for item in population
+                ]
+
                 self.log_results(finish=True)
-                if self.use_au:
-                    self.log_results(self.main_mol_buffer,buffer_type="main", finish=True)
-                    self.log_results(self.au_mol_buffer,buffer_type="au", finish=True)
+                # genetic_gfn log_results 已移除
                 break
-            self.num_gen+=1
+
+            self.num_gen += 1
             data = {
-                'history':self.history,
-                'init_pops': [obj[0] for obj in self.mol_buffer[:self.pop_size]], #init_pops,
-                'final_pops':population,
-                'all_mols':self.mol_buffer,
-                'properties':self.property_list,
+                'history': self.history,
+                'init_pops': [obj[0] for obj in self.mol_buffer[:self.pop_size]],
+                'final_pops': population,
+                'all_mols': self.mol_buffer,
+                'properties': self.property_list,
                 'evaluation': self.results_dict['results'],
-                'running_time':f'{(time.time()-start_time)/3600:.2f} hours',
+                'running_time': f'{(time.time() - start_time) / 3600:.2f} hours',
                 'experience': self.history_experience,
             }
             with open(store_path, 'wb') as f:
                 pickle.dump(data, f)
-            if self.num_gen%10==0:
+            if self.num_gen % 10 == 0:
                 print(f"Data saved to {store_path}")
-        print(f'=======> total running time { (time.time()-start_time)/3600 :.2f} hours <=======')
-        
-        return init_pops,population  # 计算效率
+
+        # 协同 + DPO 模式下，结束时也写一次 prompt_records，确保与 pkl 对应
+        if getattr(self.config, "get", None) and self.config.get('model_collaboration', default=False):
+            self._save_prompt_records_json()
+
+        print(f'=======> total running time { (time.time() - start_time) / 3600 :.2f} hours <=======')
+
+        return init_pops, population  # 计算效率
+
+    def _save_prompt_records_json(self):
+        """
+        将当前的 prompt_records 统一写入 JSON，供各类 DPO 数据构建脚本读取。
+        文件命名规则与 MOLLM_1 保持一致：
+        <save_dir>/prompt/<properties>_<save_suffix>_<seed>_prompt.json
+        """
+        if not (getattr(self.config, "get", None) and self.config.get('model_collaboration', default=False)):
+            return
+
+        prompt_dir = os.path.join(self.save_dir, "prompt")
+        os.makedirs(prompt_dir, exist_ok=True)
+        # 与 results 一样，使用统一的 experiment_tag，并在文件名中加入 _prompt 后缀
+        prompt_json_path = os.path.join(prompt_dir, self.experiment_tag + '_prompt.json')
+        with open(prompt_json_path, 'w', encoding='utf-8') as f:
+            json.dump(self.prompt_records, f, ensure_ascii=False, indent=2)
+        print(f"Prompt records saved to {prompt_json_path}.")
 
     def record(self, tmp_offspring: list, buffer_type: str) -> list:
         """
@@ -437,11 +620,12 @@ class MOO:
         crossover_prob = self.config.get('model.crossover_prob')
         mutation_prob = self.config.get('model.mutation_prob')
         explore_prob = self.config.get('model.explore_prob')
-        function = np.random.choice([self.crossover,self.mutation,self.explore],p=[crossover_prob,
-                                                                                   mutation_prob,
-                                                                                   explore_prob])
-        items,prompt,response = function(parent_list)
-        return items,prompt,response
+        function = np.random.choice(
+            [self.crossover, self.mutation, self.explore],
+            p=[crossover_prob, mutation_prob, explore_prob]
+        )
+        items, prompt, response = function(parent_list)
+        return items, prompt, response
     
     def generate_offspring(self, population: list, offspring_times: int) -> list:
         """
@@ -454,86 +638,154 @@ class MOO:
         Returns:
         - list: Evaluated and recorded offspring.
         """
-        parents = [random.sample(population, self.num_offspring) for i in range(offspring_times)]
-        parallel = True
-        if parallel:
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                futures = [executor.submit(self.mating, parent_list=parent_list) for parent_list in parents]
-                #results = [future.result() for future in futures]
-                #children, prompts, responses = zip(*results) #[[item,item],[item,item]] # ['who are you value 1', 'who are you value 2'] # ['yes, 'no']
-                #self.llm_calls += len(results)     
-                results = []
-                for future in futures:
-                    try:
-                        result = future.result(timeout=900)  # 最多等待 120 秒
-                        results.append(result)
-                    except concurrent.futures.TimeoutError:
-                        print("Warning: A task timed out after 180 seconds.")
-                        continue  # 或者 results.append(default_value)
-                if results:
-                    children, prompts, responses = zip(*results)
-                    self.llm_calls += len(results)
-                else:
-                    print("No results collected due to timeouts.")
-        else:
-            children,prompts,responses = [],[],[]
-            for parent_list in tqdm(parents):
-                child,prompt,response = self.mating(parent_list)
+        # 防御性检查：如果当前种群过小或为空，避免 random.sample 报错
+        if not population:
+            print("Warning: population is empty, skip offspring generation for this round.")
+            return []
+
+        # 当种群数量 < num_offspring 时，按可用个体数采样，避免 ValueError
+        sample_k = min(self.num_offspring, len(population))
+        
+        # 根据当前使用的模型类型调整 offspring_times（方便调试/节省 API 成本）
+        LOCAL_LLM_MODELS = [
+            'qwen2.5-0.5b-instruct',
+            'qwen2.5-3b-instruct',
+            'qwen2.5-7b-instruct',
+            'Qwen3-32B',
+            'DeepSeek-R1-0528-Qwen3-8B',
+            'Qwen3-8B',
+            'merged-sft-qwen2.5-7b-instruct',
+            'customdata-sft-qwen2.5-7b-instruct',
+            'customdata-sft-qwen2.5-7b-instruct-v2'
+        ]
+        
+        # 删除本地模型推理次数限制，统一使用默认的offspring_times
+        
+        parents = [random.sample(population, sample_k) for i in range(offspring_times)]
+
+        # 与 MOLLM_1 保持一致：本地大模型串行，API 模型并行
+        LOCAL_LLM_MODELS = [
+            'qwen2.5-0.5b-instruct',
+            'qwen2.5-3b-instruct',
+            'qwen2.5-7b-instruct',
+            'Qwen3-32B',
+            'DeepSeek-R1-0528-Qwen3-8B',
+            'Qwen3-8B',
+            'merged-sft-qwen2.5-7b-instruct',
+            'customdata-sft-qwen2.5-7b-instruct',
+            'customdata-sft-qwen2.5-7b-instruct-v2'
+        ]
+
+        if hasattr(self.llm, 'model_choice') and self.llm.model_choice in LOCAL_LLM_MODELS:
+            # 本地模型：串行推理，避免多线程占用显存，并显示进度条
+            children, prompts, responses, parent_lists = [], [], [], []
+            for parent_list in tqdm(parents, desc="LLM (local) generating offspring", leave=False):
+                child, prompt, response = self.mating(parent_list)
                 children.append(child)
                 prompts.append(prompt)
                 responses.append(response)
+                parent_lists.append(parent_list)
                 self.llm_calls += 1
-        
+        else:
+            # API 模型：并行加速，同时在终端显示进度条
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                futures = [executor.submit(self.mating, parent_list=parent_list) for parent_list in parents]
+                results = []
+                for future in tqdm(concurrent.futures.as_completed(futures),
+                                   total=len(futures),
+                                   desc="LLM (API) generating offspring",
+                                   leave=False):
+                    try:
+                        result = future.result(timeout=900)
+                        results.append(result)
+                    except concurrent.futures.TimeoutError:
+                        print("Warning: A task timed out after 900 seconds.")
+                        continue
+                if results:
+                    children, prompts, responses = zip(*results)
+                    parent_lists = parents
+                    self.llm_calls += len(results)
+                else:
+                    print("No results collected due to timeouts.")
+                    return []
+
+        # 先记录本轮所有 LLM 调用的 prompt/response（无论是否产生有效 offspring）
+        self.history.push(prompts, children, responses)
+
+        # 在协同 + DPO 场景下，统一记录每一步的 prompt / parents / children / response
+        if getattr(self.config, "get", None) and self.config.get('model_collaboration', default=False):
+            def _safe_total(item):
+                val = getattr(item, "total", 0.0)
+                if val is None:
+                    return 0.0
+                try:
+                    return float(val)
+                except (TypeError, ValueError):
+                    return 0.0
+
+            record_len = len(prompts)
+            for idx in range(record_len):
+                parent_list = parent_lists[idx] if idx < len(parent_lists) else []
+                child_list = children[idx] if idx < len(children) else []
+                prompt = prompts[idx]
+                response = responses[idx]
+
+                self.prompt_records["queries"].append({
+                    "prompt": prompt,
+                    "response": response,
+                    "parents": [
+                        {
+                            "value": p.value,
+                            "property": getattr(p, "property", None),
+                            "total": _safe_total(p)
+                        }
+                        for p in parent_list
+                    ],
+                    "children": [
+                        {
+                            "value": c.value,
+                            "property": getattr(c, "property", None),
+                            "total": _safe_total(c)
+                        }
+                        for c in child_list
+                    ]
+                })
+
         tmp_offspring = []
         if self.start:
-            self.start=False
+            self.start = False
         for child_pair in children:
             self.generated_num += len(child_pair)
             tmp_offspring.extend(child_pair)
-        
-        if self.use_au:
-            self.record(tmp_offspring,'main')
-            self.save_log_mols(tmp_offspring,buffer_type='main')
-            
-            au_smiles = self.au_model.sample_n_smiles(32,self.mol_buffer)
-            ### au_smiles = self.generate_offspring_au(population,offspring_times=20)
-            au_smiles = [self.item_factory.create(smiles) for smiles in au_smiles]
-            self.generated_num += len(au_smiles)
-            self.record(au_smiles,'au')
-            self.save_log_mols(au_smiles,buffer_type='au')
-            tmp_offspring.extend(au_smiles)
-            
-        #offspring = self.sanitize(tmp_offspring,record=True)
+
+        # genetic_gfn 流程已移除
+
         offspring = tmp_offspring
-        
         if len(offspring) == 0:
             return []
 
         offspring = self.evaluate(offspring)
-        self.history.push(prompts,children,responses) 
+
         return offspring
 
-    def save_log_mols(self, mols: list, buffer_type: str) -> None:
-        """
-        Evaluates molecules, trains AU model if applicable, stores in buffer, and logs metrics.
+    # save_log_mols 函数已移除（genetic_gfn 专用）
 
-        Parameters:
-        - mols (list): List of Item objects to save and evaluate.
-        - buffer_type (str): Indicates which buffer ('main' or 'au') to update.
+    # ---------------- 协同模式下主/辅 LLM 切换（对齐 MOLLM_1） ----------------
+    def switch_llm(self):
         """
-        self.time_step += 1
-        mols,_ = self.reward_system.evaluate(mols,self.mol_buffer)
-        if buffer_type=='main':
-            mol_buffer = self.main_mol_buffer
-            self.au_model.train_on_smiles([i.value for i in mols],[i.total for i in mols],loop=4,time_step=self.time_step,mol_buffer=mol_buffer)
-        elif buffer_type=='au':
-            mol_buffer = self.au_mol_buffer
-            self.au_model.train_on_smiles([i.value for i in mols],[i.total for i in mols],loop=4,time_step=self.time_step,mol_buffer=mol_buffer)
-        # print('oracle length: ',len(self.mol_buffer))
-
-        self.mol_buffer_store(mol_buffer,mols)
-        # 这里加了重复的 
-        self.log_results(mol_buffer,buffer_type, finish=False)
+        两个 LLM 轮流出手：
+        - flag=0: 使用主模型 llm1
+        - flag=1: 使用辅模型 llm2（本地 Qwen，用于 DPO 微调）
+        """
+        if self.llm2 is not None:
+            self.current_llm_flag = 1 - self.current_llm_flag
+            self.llm = self.llm1 if self.current_llm_flag == 0 else self.llm2
+            # 更新轮次计数器（与 MOLLM_1 一致）
+            if self.current_llm_flag == 0:
+                self.llm1_rounds += 1
+            else:
+                self.llm2_rounds += 1
+            self.model_round_counter += 1
 
     def mol_buffer_store(self, mol_buffer: list, mols: list) -> list:
         """

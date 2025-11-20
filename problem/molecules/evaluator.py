@@ -19,10 +19,10 @@ def get_evaluation(evaluate_metric, smiles):
 from tdc import Oracle, Evaluator
 
 def generate_initial_population(config,seed):
-    with open('/root/nian/MOLLM/data/data_goal5.json','r') as f:
+    with open('/home/lzz/MCCE/data/data_goal5.json','r') as f:
         data = json.load(f)
     data_type = f'random{seed-41}' # initial_pop: "random1" # best100, worst100, random1 ~ 5
-    data_type = 'best100'
+    data_type = 'random1'
     print(f'loading {data_type} as initial pop!')
     smiles = data[data_type]
     return smiles
@@ -66,7 +66,7 @@ class RewardingSystem:
             results.append(result)
         return np.concatenate(results)
     
-    def evaluate(self,items):
+    def evaluate(self,items,mol_buffer=None):
         items, failed_num,repeated_num = self.sanitize(items)
         original_results = {}
         transformed_results = {}

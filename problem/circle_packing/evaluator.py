@@ -55,7 +55,7 @@ class RewardingSystem:
     def __init__(self,config=None):
         self.config = config
     
-    def evaluate(self,items):
+    def evaluate(self,items,mol_buffer=None):
         valid_items = []
         log_dict = {}
         for item in items:

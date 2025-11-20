@@ -1,0 +1,33 @@
+exper_name: "MOCVRP"
+description: "Multi-Objective Capacitated Vehicle Routing Problem with 200 customers"
+save_dir: "/home/lzz/MOCVRP_Results"
+save_suffix: "mocvrp"
+initial_pop: "random1" # best100, worst100, random1 ~ 5
+resume: False
+
+model:
+  name: zgca,gemini-2.5-flash-nothinking  #,gemini-2.5-flash-nothinking     gpt-4-0125-preview  gpt-4o-2024-05-13
+  # name2: zgca,gpt-4o-2024-05-13
+  prompt_module: Prompt
+  experience_prob: 0.0
+  crossover_prob: 0.8
+  mutation_prob: 0.2
+  explore_prob: 0.
+  max_new_tokens: 1024  # MOCVRP 需要完整 solution，放宽回复长度
+
+# 本地模型推理次数已恢复正常，与API模型统一
+model_collaboration: True  # 启用主/辅模型协同（主：API，辅：本地 Qwen-7B）
+use_solver: False
+
+goals: [total_distance, makespan]
+optimization_direction: [min, min]
+prompt_info_path: problem/mocvrp/prompt_info.yaml
+### Important ###
+evalutor_path: problem.mocvrp.evaluator
+
+# MOCVRP 使用 embedding-based 相似度构造 DPO 数据
+dpo_script_path: /home/lzz/MCCE/tools/makerldata_mocvrp_embed.py
+
+optimization:
+  pop_size: 50
+  eval_budget: 1000

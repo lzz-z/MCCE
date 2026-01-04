@@ -10,6 +10,7 @@ def extract_symbol_and_number(requirement_str):
     else:
         raise NotImplementedError('The format of requirement is wrong:', requirement_str)
 
+
 def judge(requirement,input_mol_value,output_mol_value):
     metas = requirement.split(',')
     if metas[0] == 'the same':
